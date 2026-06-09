@@ -1,5 +1,6 @@
 services:
   wcp-widget-markdown-editor:
+    build: .
     image: penrithbeacon/wcp-widget-markdown-editor:latest
     container_name: wcp-widget-markdown-editor
     ports:
