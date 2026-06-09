@@ -1,4 +1,4 @@
-# WCP Widget — Markdown Editor
+# WCP Widget: Markdown Editor
 
 WYSIWYG markdown file editor with folder browser, multi-instance configuration, Publish to Web, and optional companion host agent for native filesystem access.
 
@@ -18,13 +18,6 @@ WYSIWYG markdown file editor with folder browser, multi-instance configuration, 
 
 ---
 
-## Requirements
-
-- Docker and Docker Compose
-- (Optional) `wcp-agent-markdown-editor` companion agent — enables host filesystem browsing, drive enumeration, and remote directory creation
-
----
-
 ## Quick Start
 
 ```bash
@@ -35,7 +28,7 @@ docker run -d \
   -e CONTAINER_NAME=wcp-widget-markdown-editor \
   -e WIDGET_PORT=3748 \
   --restart unless-stopped \
-  penrithbeacon/wcp-widget-markdown-editor:latest
+  docker.io/penrithbeacon/wcp-widget-markdown-editor:latest
 ```
 
 ---
@@ -45,8 +38,7 @@ docker run -d \
 ```yaml
 services:
   wcp-widget-markdown-editor:
-    build: .
-    image: penrithbeacon/wcp-widget-markdown-editor:latest
+    image: docker.io/penrithbeacon/wcp-widget-markdown-editor:latest
     container_name: wcp-widget-markdown-editor
     ports:
       - "3748:3748"
@@ -71,37 +63,31 @@ volumes:
 
 ### Without companion agent
 
-The widget works immediately after starting. Files are read from and written to the
-`/workspace` Docker volume. Use the Settings component to set the root folder path
-within the volume.
+The widget works immediately after starting. Files are stored in the `markdown_workspace`
+Docker volume at `/workspace`. Use the Settings component to set the active root folder.
 
 ### With companion agent
 
-The `wcp-agent-markdown-editor` companion agent adds host filesystem access — browse
-your local drives and directories from within the widget rather than being limited to
-the Docker volume.
+The `wcp-agent-markdown-editor` companion agent adds host filesystem access — browse your
+local drives from within the widget.
 
 1. Download the macOS installer from the **About** component (`GET /widget/agent/installer`)
    or from [GitHub Releases](https://github.com/penrithbeacon/wcp-agent-markdown-editor/releases)
-2. Run the `.pkg` installer — the agent starts automatically at login
-3. The widget detects the agent automatically; the Settings component confirms its status
-
-The agent listens on `127.0.0.1:3749` and is reachable from Docker via `host.docker.internal:3749`.
+2. Run the `.pkg` installer — the agent starts automatically at login on `127.0.0.1:3749`
+3. The widget detects the agent automatically via `host.docker.internal:3749`
 
 ---
 
 ## WCP Request Headers
 
-All WCP widgets accept these headers on every request. The dashboard sends them automatically.
-
-| Header | Description |
-|--------|-------------|
-| `Wcp-Instance-Id` | Unique card instance identifier |
-| `Wcp-Dashboard-Id` | Dashboard installation identifier |
-| `Wcp-Version` | WCP protocol version of the requesting dashboard |
-| `Wcp-Widget-Id` | Widget identifier within the dashboard |
-| `Wcp-Orchestration-Id` | Active orchestration identifier (for state scoping) |
-| `Wcp-Application-Id` | Active application identifier (for state scoping) |
+| Header | Required | Description |
+|--------|:--------:|-------------|
+| `Wcp-Instance-Id` | Yes | Unique card instance identifier |
+| `Wcp-Dashboard-Id` | Yes | Dashboard installation identifier |
+| `Wcp-Version` | Yes | WCP protocol version of the requesting dashboard |
+| `Wcp-Widget-Id` | Yes | Widget identifier within the dashboard |
+| `Wcp-Orchestration-Id` | No | Active orchestration identifier (for state scoping) |
+| `Wcp-Application-Id` | No | Active application identifier (for state scoping) |
 
 ---
 
@@ -136,18 +122,22 @@ All WCP widgets accept these headers on every request. The dashboard sends them 
 
 ---
 
-## Data Storage
+## API
 
-| Storage | Path | Contents |
-|---------|------|----------|
-| `markdown_workspace` volume | `/workspace` | Markdown files and folders managed by the widget |
-
-**Backup:**
+**Check agent status:**
 ```bash
-docker run --rm \
-  -v markdown_workspace:/data \
-  -v $(pwd):/backup \
-  alpine tar czf /backup/workspace-backup.tar.gz /data
+curl -s http://localhost:3748/widget/api/agent/status
+# { "available": true } or { "available": false }
+```
+
+**List files:**
+```bash
+curl -s "http://localhost:3748/widget/api/files/list?path=/workspace"
+```
+
+**Read logs:**
+```bash
+curl -s http://localhost:3748/widget/logs | python3 -m json.tool
 ```
 
 ---
@@ -188,9 +178,8 @@ docker run --rm \
 
 ---
 
-## Links
+## Source
 
-- [Penrith Beacon](https://penrithbeacon.com)
-- [Widget Context Protocol](https://widgetcontextprotocol.com)
-- [Docker Hub](https://hub.docker.com/r/penrithbeacon/wcp-widget-markdown-editor)
 - [GitHub](https://github.com/penrithbeacon/wcp-widget-markdown-editor)
+- [Widget Context Protocol](https://widgetcontextprotocol.com)
+- [Penrith Beacon](https://penrithbeacon.com)

@@ -88,6 +88,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:system-
 <script type="module">
 window.parent.postMessage({ type: 'wcp:ready' }, '*');
 window.parent.postMessage({ type: 'wcp:request-theme' }, '*');
+if (window.location.hash.startsWith('#wcp-theme=')) {
+  try {
+    const _fvars = JSON.parse(atob(window.location.hash.slice(11)));
+    for (const [k, v] of Object.entries(_fvars)) document.documentElement.style.setProperty(k, v);
+  } catch {}
+}
 (function() {
   const m = location.hash.match(/[#&]wcp:theme=([^&]*)/);
   if (m) applyTheme(JSON.parse(decodeURIComponent(m[1])));
