@@ -3,8 +3,8 @@ import json
 import uuid
 import zipfile
 import io
-import secrets
-from datetime import datetime
+import urllib.request
+import urllib.error
 from flask import Flask, request, jsonify, render_template, send_file, redirect, Response
 from flask_cors import CORS
 
@@ -14,7 +14,7 @@ CORS(app)
 PORT          = int(os.environ.get('WIDGET_PORT', 3748))
 CONTAINER     = os.environ.get('CONTAINER_NAME', 'wcp-widget-markdown-editor')
 VERSION       = '1.0.0'
-WORKSPACE     = '/workspace'
+WORKSPACE     = '/workspace'          # Docker volume — state only (config, guids, published)
 AGENT_PORT    = int(os.environ.get('AGENT_PORT', 3749))
 AGENT_BASE    = f'http://host.docker.internal:{AGENT_PORT}'
 
@@ -22,7 +22,7 @@ CONFIG_FILE   = os.path.join(WORKSPACE, '.widget-config.json')
 GUID_FILE     = os.path.join(WORKSPACE, '.widget-guids.json')
 PUBLISHED_DIR = os.path.join(WORKSPACE, '.published')
 
-# ── Helpers ─────────────────────────────────────────────────────────────────
+# ── State helpers (volume — config, guids, published only) ───────────────────
 
 def ensure_workspace():
     os.makedirs(WORKSPACE, exist_ok=True)
@@ -60,17 +60,37 @@ def save_instance_config(instance_id, config):
     save_json(CONFIG_FILE, all_config)
 
 def instance_id_from_request():
-    # Dashboard passes instance ID as Wcp-Instance-Id header for API calls,
-    # but as ?wcpInstanceId= query param for iframe page loads (browsers cannot
-    # add custom headers to iframe src URLs).
     return (request.headers.get('Wcp-Instance-Id')
             or request.args.get('wcpInstanceId', 'default'))
 
-def safe_path(root, rel):
-    """Resolve rel against root; return None if it escapes root."""
-    root  = os.path.realpath(root)
-    full  = os.path.realpath(os.path.join(root, rel.lstrip('/')))
-    return full if full.startswith(root) else None
+# ── Agent proxy helpers ───────────────────────────────────────────────────────
+
+def agent_get(path, params=None, timeout=5):
+    """GET a path on the agent. Returns (data_dict, status_code) or raises."""
+    url = AGENT_BASE + path
+    if params:
+        qs = '&'.join(f'{k}={urllib.request.quote(str(v), safe="")}' for k, v in params.items())
+        url = url + '?' + qs
+    req = urllib.request.Request(url)
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read()), r.status
+
+def agent_post(path, body, timeout=5):
+    """POST JSON body to a path on the agent. Returns (data_dict, status_code) or raises."""
+    payload = json.dumps(body).encode()
+    req = urllib.request.Request(
+        AGENT_BASE + path, data=payload,
+        headers={'Content-Type': 'application/json'}, method='POST')
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read()), r.status
+
+def agent_available():
+    """Quick liveness check — returns True if agent responds to /health."""
+    try:
+        agent_get('/health', timeout=2)
+        return True
+    except Exception:
+        return False
 
 # ── WCP Discovery ────────────────────────────────────────────────────────────
 
@@ -173,9 +193,10 @@ def widget_index():
 def explorer():
     iid = instance_id_from_request()
     cfg = get_instance_config(iid)
+    # No WORKSPACE fallback — root must be configured; widget.html handles empty root
     return render_template('widget.html',
         version=VERSION, port=PORT, instance_id=iid,
-        root=cfg.get('root', '') or WORKSPACE, agent_port=AGENT_PORT)
+        root=cfg.get('root', ''), agent_port=AGENT_PORT)
 
 @app.route('/widget/settings/')
 def settings():
@@ -204,48 +225,75 @@ def configure():
     save_instance_config(iid, cfg)
     return jsonify({'status': 'ok'})
 
-# ── File API (served to frontend; real access via agent) ─────────────────────
+# ── Root path validation ──────────────────────────────────────────────────────
+
+@app.route('/widget/api/root/validate')
+def root_validate():
+    """Check that the configured root exists and the agent is reachable."""
+    iid  = instance_id_from_request()
+    root = get_instance_config(iid).get('root', '')
+    if not root:
+        return jsonify({'valid': False, 'reason': 'no_root', 'agent': False})
+    try:
+        data, _ = agent_get('/files/validate', {'path': root})
+        ok = bool(data.get('valid'))
+        return jsonify({'valid': ok, 'reason': '' if ok else 'path_unavailable',
+                        'agent': True, 'path': root})
+    except Exception:
+        return jsonify({'valid': False, 'reason': 'agent_offline', 'agent': False, 'path': root})
+
+# ── File API — all ops proxied through the host agent ─────────────────────────
 
 @app.route('/widget/api/files/list')
 def list_files():
-    """List files and folders at path within the mounted workspace."""
     rel  = request.args.get('path', '')
     iid  = instance_id_from_request()
-    root = get_instance_config(iid).get('root', '') or WORKSPACE
-    if not root.startswith('/'):
-        root = os.path.join(WORKSPACE, root)
-    target = safe_path(root, rel)
-    if not target or not os.path.isdir(target):
-        return jsonify({'error': 'invalid path'}), 400
+    root = get_instance_config(iid).get('root', '')
+    if not root:
+        return jsonify({'error': 'no root configured'}), 400
+    # Build the absolute path to pass to the agent
+    abs_path = root if not rel else os.path.join(root, rel.lstrip('/'))
+    try:
+        data, _ = agent_get('/files/browse', {'path': abs_path})
+    except urllib.error.HTTPError as e:
+        return jsonify({'error': f'agent error {e.code}'}), 502
+    except Exception:
+        return jsonify({'error': 'agent offline'}), 503
+
+    # Filter to show only directories and .md files; hide dot-names
+    raw = data.get('entries', [])
     entries = []
-    for name in sorted(os.listdir(target)):
+    for e in raw:
+        name = e.get('name', '')
         if name.startswith('.'):
-            continue   # hide dot-files and dot-dirs (.published, .widget-config.json, etc.)
-        full  = os.path.join(target, name)
-        is_dir = os.path.isdir(full)
-        ext   = os.path.splitext(name)[1].lower()
+            continue
+        is_dir = e.get('type') == 'dir'
+        ext    = e.get('ext', '')
         if not is_dir and ext != '.md':
-            continue   # only .md files visible; all non-hidden dirs visible
-        entries.append({
-            'name': name,
-            'type': 'dir' if is_dir else 'file',
-            'ext':  ext
-        })
+            continue
+        entries.append({'name': name, 'type': e['type'], 'ext': ext})
     return jsonify({'path': rel, 'entries': entries})
 
 @app.route('/widget/api/files/read')
 def read_file():
     rel  = request.args.get('path', '')
     iid  = instance_id_from_request()
-    root = get_instance_config(iid).get('root', '') or WORKSPACE
-    if not root.startswith('/'):
-        root = os.path.join(WORKSPACE, root)
-    target = safe_path(root, rel)
-    if not target or not os.path.isfile(target):
-        return jsonify({'error': 'file not found'}), 404
-    with open(target, 'r', errors='replace') as f:
-        content = f.read()
-    return jsonify({'path': rel, 'content': content})
+    root = get_instance_config(iid).get('root', '')
+    if not root:
+        return jsonify({'error': 'no root configured'}), 400
+    abs_path = root if not rel else os.path.join(root, rel.lstrip('/'))
+    try:
+        data, _ = agent_get('/files/read', {'path': abs_path})
+        return jsonify({'path': rel, 'content': data.get('content', '')})
+    except urllib.error.HTTPError as e:
+        body = e.read()
+        try:
+            err = json.loads(body).get('error', 'agent error')
+        except Exception:
+            err = 'agent error'
+        return jsonify({'error': err}), e.code
+    except Exception:
+        return jsonify({'error': 'agent offline'}), 503
 
 @app.route('/widget/api/files/save', methods=['POST'])
 def save_file():
@@ -253,64 +301,70 @@ def save_file():
     rel     = data.get('path', '')
     content = data.get('content', '')
     iid     = instance_id_from_request()
-    root    = get_instance_config(iid).get('root', '') or WORKSPACE
-    if not root.startswith('/'):
-        root = os.path.join(WORKSPACE, root)
-    target = safe_path(root, rel)
-    if not target:
-        return jsonify({'error': 'invalid path'}), 400
-    os.makedirs(os.path.dirname(target), exist_ok=True)
-    with open(target, 'w') as f:
-        f.write(content)
-    return jsonify({'status': 'ok', 'path': rel})
+    root    = get_instance_config(iid).get('root', '')
+    if not root:
+        return jsonify({'error': 'no root configured'}), 400
+    abs_path = root if not rel else os.path.join(root, rel.lstrip('/'))
+    try:
+        agent_post('/files/write', {'path': abs_path, 'content': content})
+        return jsonify({'status': 'ok', 'path': rel})
+    except urllib.error.HTTPError as e:
+        return jsonify({'error': f'agent error {e.code}'}), 502
+    except Exception:
+        return jsonify({'error': 'agent offline'}), 503
 
 @app.route('/widget/api/files/mkdir', methods=['POST'])
 def mkdir():
     data = request.get_json(force=True, silent=True) or {}
     rel  = data.get('path', '')
     iid  = instance_id_from_request()
-    root = get_instance_config(iid).get('root', '') or WORKSPACE
-    if not root.startswith('/'):
-        root = os.path.join(WORKSPACE, root)
-    target = safe_path(root, rel)
-    if not target:
-        return jsonify({'error': 'invalid path'}), 400
-    os.makedirs(target, exist_ok=True)
-    return jsonify({'status': 'ok'})
+    root = get_instance_config(iid).get('root', '')
+    if not root:
+        return jsonify({'error': 'no root configured'}), 400
+    abs_path = root if not rel else os.path.join(root, rel.lstrip('/'))
+    try:
+        agent_post('/files/mkdir', {'path': abs_path})
+        return jsonify({'status': 'ok'})
+    except urllib.error.HTTPError as e:
+        return jsonify({'error': f'agent error {e.code}'}), 502
+    except Exception:
+        return jsonify({'error': 'agent offline'}), 503
 
 @app.route('/widget/api/files/rename', methods=['POST'])
 def rename_file():
-    data     = request.get_json(force=True, silent=True) or {}
-    old_rel  = data.get('old', '')
-    new_rel  = data.get('new', '')
-    iid      = instance_id_from_request()
-    root     = get_instance_config(iid).get('root', '') or WORKSPACE
-    if not root.startswith('/'):
-        root = os.path.join(WORKSPACE, root)
-    old_path = safe_path(root, old_rel)
-    new_path = safe_path(root, new_rel)
-    if not old_path or not new_path or not os.path.exists(old_path):
-        return jsonify({'error': 'invalid path'}), 400
-    os.rename(old_path, new_path)
-    return jsonify({'status': 'ok'})
+    data    = request.get_json(force=True, silent=True) or {}
+    old_rel = data.get('old', '')
+    new_rel = data.get('new', '')
+    iid     = instance_id_from_request()
+    root    = get_instance_config(iid).get('root', '')
+    if not root:
+        return jsonify({'error': 'no root configured'}), 400
+    old_abs = os.path.join(root, old_rel.lstrip('/'))
+    new_abs = os.path.join(root, new_rel.lstrip('/'))
+    try:
+        agent_post('/files/rename', {'old': old_abs, 'new': new_abs})
+        return jsonify({'status': 'ok'})
+    except urllib.error.HTTPError as e:
+        return jsonify({'error': f'agent error {e.code}'}), 502
+    except Exception:
+        return jsonify({'error': 'agent offline'}), 503
 
 @app.route('/widget/api/files/delete', methods=['POST'])
 def delete_file():
-    import shutil
     data = request.get_json(force=True, silent=True) or {}
     rel  = data.get('path', '')
     iid  = instance_id_from_request()
-    root = get_instance_config(iid).get('root', '') or WORKSPACE
-    if not root.startswith('/'):
-        root = os.path.join(WORKSPACE, root)
-    target = safe_path(root, rel)
-    if not target or not os.path.exists(target):
-        return jsonify({'error': 'not found'}), 404
-    if os.path.isdir(target):
-        shutil.rmtree(target)
-    else:
-        os.remove(target)
-    return jsonify({'status': 'ok'})
+    root = get_instance_config(iid).get('root', '')
+    if not root:
+        return jsonify({'error': 'no root configured'}), 400
+    abs_path = os.path.join(root, rel.lstrip('/'))
+    try:
+        agent_post('/files/delete', {'path': abs_path})
+        return jsonify({'status': 'ok'})
+    except urllib.error.HTTPError as e:
+        return jsonify({'error': f'agent error {e.code}'}), 502
+    except Exception:
+        return jsonify({'error': 'agent offline'}), 503
 
 # ── Publish to Web ────────────────────────────────────────────────────────────
 
@@ -367,8 +421,6 @@ def export_wcp():
 
 @app.route('/widget/agent/installer')
 def agent_installer():
-    # The packaged .pkg installer is bundled into the image at build time.
-    # Dockerfile copies src/ → /app/src/, so installers land at /app/src/installers/.
     pkg = '/app/src/installers/wcp-agent-markdown-editor.pkg'
     if os.path.exists(pkg):
         return send_file(pkg, mimetype='application/octet-stream',
@@ -380,19 +432,44 @@ def agent_installer():
                    'https://github.com/HarrisonOfTheNorth/wcp-agent-markdown-editor/releases'
     }), 503
 
-# ── Agent Status ──────────────────────────────────────────────────────────────
+# ── Agent Status + picker proxies ─────────────────────────────────────────────
 
 @app.route('/widget/api/agent/status')
 def agent_status():
-    import urllib.request
     try:
-        with urllib.request.urlopen(f'{AGENT_BASE}/health', timeout=2) as r:
-            data = json.loads(r.read())
-            return jsonify({'available': True, 'agent': data})
+        data, _ = agent_get('/health', timeout=2)
+        return jsonify({'available': True, 'agent': data})
     except Exception:
         return jsonify({'available': False})
 
-# ── Logs (optional WCP endpoint) ─────────────────────────────────────────────
+@app.route('/widget/api/agent/browse')
+def agent_browse():
+    """Proxy /files/browse from the agent for the folder picker."""
+    path = request.args.get('path', '')
+    if not path:
+        path = os.path.expanduser('~')
+    # Expand ~ server-side (the widget can't do it)
+    if path.startswith('~'):
+        # Ask the agent to resolve it by passing the literal path — agent calls expanduser
+        pass
+    try:
+        data, _ = agent_get('/files/browse', {'path': path})
+        return jsonify(data)
+    except urllib.error.HTTPError as e:
+        return jsonify({'error': f'agent error {e.code}'}), 502
+    except Exception:
+        return jsonify({'error': 'agent offline'}), 503
+
+@app.route('/widget/api/agent/drives')
+def agent_drives():
+    """Proxy /files/drives from the agent for the picker sidebar."""
+    try:
+        data, _ = agent_get('/files/drives')
+        return jsonify(data)
+    except Exception:
+        return jsonify({'drives': []})
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
 
 @app.route('/widget/logs')
 def logs():

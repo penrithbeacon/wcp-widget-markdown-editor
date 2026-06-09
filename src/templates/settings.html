@@ -9,6 +9,7 @@
 *::-webkit-scrollbar-track{background:var(--surface2)}
 *::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
 *::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+*{scrollbar-color:var(--border) var(--surface2);scrollbar-width:thin}
 :root{--bg:#1e1e2e;--surface:#2a2a3e;--surface2:#313145;--border:#44445a;--text:#cdd6f4;--muted:#7f849c;--accent:#89b4fa;--green:#a6e3a1;--red:#f38ba8;--yellow:#f9e2af}
 html,body{height:100%;background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:14px;overflow-y:auto}
 .page{max-width:640px;margin:0 auto;padding:24px 20px}
@@ -20,7 +21,7 @@ h1{font-size:18px;color:var(--accent);margin-bottom:20px}
 .field input,.field select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px 10px;color:var(--text);font-size:14px;outline:none}
 .field input:focus,.field select:focus{border-color:var(--accent)}
 .field .hint{font-size:11px;color:var(--muted);margin-top:4px}
-.btn-row{display:flex;gap:8px;margin-top:4px}
+.btn-row{display:flex;gap:8px;margin-top:4px;flex-wrap:wrap}
 .btn{padding:6px 14px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:13px}
 .btn:hover{background:var(--border)}
 .btn.primary{background:var(--accent);color:#1e1e2e;border-color:var(--accent)}
@@ -35,8 +36,61 @@ h1{font-size:18px;color:var(--accent);margin-bottom:20px}
 .agent-dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
 .agent-dot.ok{background:var(--green)}
 .agent-dot.err{background:var(--red)}
-.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--accent);color:#1e1e2e;padding:8px 20px;border-radius:20px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--accent);color:#1e1e2e;padding:8px 20px;border-radius:20px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:600}
 .toast.show{opacity:1}
+
+/* ── Full-screen folder picker ───────────────────────────────────────────────── */
+#picker{
+  display:none;position:fixed;inset:0;z-index:500;
+  flex-direction:column;background:var(--bg);
+}
+#picker.open{display:flex}
+#picker-header{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 16px;background:var(--surface);
+  border-bottom:1px solid var(--border);flex-shrink:0
+}
+#picker-header h3{font-size:14px;flex:1}
+#picker-path{
+  font-size:11px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%;text-align:right
+}
+#picker-body{display:flex;flex:1;overflow:hidden}
+#picker-sidebar{
+  width:180px;flex-shrink:0;background:var(--surface);
+  border-right:1px solid var(--border);overflow-y:auto;padding:8px 0
+}
+.picker-section-label{padding:4px 12px 2px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.picker-loc{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 14px;cursor:pointer;font-size:13px;
+  white-space:nowrap;overflow:hidden
+}
+.picker-loc:hover{background:var(--surface2)}
+.picker-loc.active{background:var(--surface2);color:var(--accent)}
+.picker-loc .ploc-icon{flex-shrink:0}
+.picker-loc .ploc-name{overflow:hidden;text-overflow:ellipsis}
+#picker-list{flex:1;overflow-y:auto;padding:4px 0;position:relative}
+.picker-entry{
+  display:flex;align-items:center;gap:8px;
+  padding:6px 16px;cursor:pointer;font-size:13px;
+  white-space:nowrap;overflow:hidden
+}
+.picker-entry:hover{background:var(--surface2)}
+.picker-entry .pe-icon{flex-shrink:0}
+.picker-entry .pe-name{overflow:hidden;text-overflow:ellipsis}
+#picker-footer{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 16px;background:var(--surface);
+  border-top:1px solid var(--border);flex-shrink:0
+}
+#picker-select-label{flex:1;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#picker-empty{
+  position:absolute;inset:0;
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  color:var(--muted);gap:8px;font-size:13px
+}
+#picker-empty.visible{display:flex}
 </style>
 </head>
 <body>
@@ -57,16 +111,16 @@ h1{font-size:18px;color:var(--accent);margin-bottom:20px}
     <h2>Root Folder</h2>
     <div class="field">
       <label>Workspace root path</label>
-      <input id="root-input" type="text" value="{{ root }}"
-             placeholder="e.g. /documents  (relative to /workspace mount)" />
-      <div class="hint">
-        Path is relative to the Docker volume mount point (<code>/workspace</code>).
-        To use a different host path, update the volume mapping in <code>docker-compose.yml</code>
-        and restart the container.
-        <span id="agent-path-hint" style="display:none">
-          With the companion agent running, you can use the folder picker in the Explorer
-          to browse the host filesystem.
-        </span>
+      <div style="display:flex;gap:6px">
+        <input id="root-input" type="text" value="{{ root }}"
+               placeholder="e.g. /Users/you/Documents/notes" style="flex:1" />
+        <button class="btn" id="btn-browse" onclick="openPicker()"
+                style="flex-shrink:0;display:none"
+                title="Browse host filesystem via companion agent">📂 Browse</button>
+      </div>
+      <div class="hint" style="margin-top:5px">
+        Any absolute path on your Mac that the companion agent can access.
+        <strong>📂 Browse</strong> appears when the agent is connected.
       </div>
     </div>
     <div class="btn-row">
@@ -82,8 +136,8 @@ h1{font-size:18px;color:var(--accent);margin-bottom:20px}
       <div id="agent-status-text" style="flex:1;font-size:13px">Checking…</div>
     </div>
     <p style="font-size:12px;color:var(--muted);margin-top:10px">
-      The companion agent runs natively on your Mac and enables host filesystem browsing.
-      Install it once — it starts automatically at login.
+      The companion agent runs natively on your Mac and provides access to your host
+      filesystem. Install it once — it starts automatically at login.
     </p>
     <div class="btn-row" style="margin-top:10px">
       <button class="btn primary" onclick="downloadAgent()">⬇ Download Agent Installer</button>
@@ -120,11 +174,38 @@ h1{font-size:18px;color:var(--accent);margin-bottom:20px}
   </div>
 </div>
 
+<!-- Full-screen folder picker -->
+<div id="picker">
+  <div id="picker-header">
+    <h3>Choose Root Folder</h3>
+    <span id="picker-path"></span>
+    <button class="btn" style="margin-left:8px;flex-shrink:0" onclick="closePicker()">✕ Cancel</button>
+  </div>
+  <div id="picker-body">
+    <div id="picker-sidebar">
+      <div class="picker-section-label">Favourites</div>
+      <div id="picker-favs"></div>
+      <div class="picker-section-label" style="margin-top:8px">Locations</div>
+      <div id="picker-locs"></div>
+    </div>
+    <div id="picker-list">
+      <div id="picker-empty">
+        <div>📂</div>
+        <div>No subfolders here.</div>
+      </div>
+    </div>
+  </div>
+  <div id="picker-footer">
+    <span id="picker-select-label">Browse to a folder and click Select.</span>
+    <button class="btn primary" onclick="pickerSelect()">✓ Select This Folder</button>
+    <button class="btn" onclick="closePicker()">Cancel</button>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script type="module">
-// WCP theme reception
-// applyTheme sets WCP-standard --wcp-color-* vars AND maps them to widget internal aliases.
+// ── WCP theme ────────────────────────────────────────────────────────────────
 function applyTheme(t) {
   const MAP = {
     '--wcp-color-bg':            '--bg',
@@ -146,46 +227,146 @@ function applyTheme(t) {
 window.parent.postMessage({ type: 'wcp:ready' }, '*');
 window.parent.postMessage({ type: 'wcp:request-theme' }, '*');
 if (window.location.hash.startsWith('#wcp-theme=')) {
-  try {
-    const _p = JSON.parse(atob(window.location.hash.slice(11)));
-    applyTheme(_p.vars || _p);
-  } catch {}
+  try { const _p = JSON.parse(atob(window.location.hash.slice(11))); applyTheme(_p.vars || _p); } catch {}
 }
 window.addEventListener('message', e => {
   if ((e.data?.type === 'wcp:theme' || e.data?.type === 'wcp:context') && (e.data.vars || e.data.theme))
     applyTheme(e.data.vars || e.data.theme);
 });
 
-const INSTANCE_ID = '{{ instance_id }}';
-const PORT        = {{ port }};
+const INSTANCE_ID  = '{{ instance_id }}';
+const PORT         = {{ port }};
 let   currentTheme = '{{ theme }}';
+let   pickerCurrentPath = '';
 
 // Mark active theme card
 document.querySelectorAll('.theme-card').forEach(c => {
   if (c.dataset.theme === currentTheme) c.classList.add('active');
 });
 
-// Check agent
+// ── Toast ────────────────────────────────────────────────────────────────────
+function toast(msg, dur = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), dur);
+}
+
+// ── Agent check ───────────────────────────────────────────────────────────────
 async function checkAgent() {
   try {
     const r = await fetch('/widget/api/agent/status');
     const d = await r.json();
-    const dot  = document.getElementById('agent-dot');
-    const text = document.getElementById('agent-status-text');
-    const hint = document.getElementById('agent-path-hint');
+    const dot    = document.getElementById('agent-dot');
+    const text   = document.getElementById('agent-status-text');
+    const browse = document.getElementById('btn-browse');
     if (d.available) {
-      dot.className  = 'agent-dot ok';
+      dot.className    = 'agent-dot ok';
       text.textContent = `Companion agent connected (v${d.agent?.version || '?'})`;
-      hint.style.display = 'inline';
+      browse.style.display = '';
     } else {
-      dot.className  = 'agent-dot err';
+      dot.className    = 'agent-dot err';
       text.textContent = 'Companion agent not detected — download and install below.';
-      hint.style.display = 'none';
+      browse.style.display = 'none';
     }
   } catch {}
 }
 checkAgent();
 
+// ── Full-screen picker ────────────────────────────────────────────────────────
+window.openPicker = async function() {
+  document.getElementById('picker').classList.add('open');
+  // Populate favourites
+  const favs = [
+    { name: 'Home',      icon: '🏠', path: '~' },
+    { name: 'Desktop',   icon: '🖥',  path: '~/Desktop' },
+    { name: 'Documents', icon: '📄', path: '~/Documents' },
+    { name: 'Downloads', icon: '⬇',  path: '~/Downloads' },
+  ];
+  const favsEl = document.getElementById('picker-favs');
+  favsEl.innerHTML = '';
+  favs.forEach(f => {
+    const el = document.createElement('div');
+    el.className = 'picker-loc';
+    el.innerHTML = `<span class="ploc-icon">${f.icon}</span><span class="ploc-name">${f.name}</span>`;
+    el.addEventListener('click', () => {
+      document.querySelectorAll('.picker-loc').forEach(x => x.classList.remove('active'));
+      el.classList.add('active');
+      pickerBrowse(f.path);
+    });
+    favsEl.appendChild(el);
+  });
+  // Load locations from agent
+  const locsEl = document.getElementById('picker-locs');
+  locsEl.innerHTML = '<div class="picker-loc" style="opacity:.5">Loading…</div>';
+  try {
+    const r  = await fetch('/widget/api/agent/drives');
+    const dj = await r.json();
+    locsEl.innerHTML = '';
+    (dj.drives || []).forEach(loc => {
+      const el = document.createElement('div');
+      el.className = 'picker-loc';
+      const icon = loc.type === 'home' ? '🏠' : '💾';
+      el.innerHTML = `<span class="ploc-icon">${icon}</span><span class="ploc-name" title="${loc.path}">${loc.name}</span>`;
+      el.addEventListener('click', () => {
+        document.querySelectorAll('.picker-loc').forEach(x => x.classList.remove('active'));
+        el.classList.add('active');
+        pickerBrowse(loc.path);
+      });
+      locsEl.appendChild(el);
+    });
+  } catch {
+    locsEl.innerHTML = '<div class="picker-loc" style="opacity:.5;font-size:12px">Locations unavailable</div>';
+  }
+  // Start at current root or home
+  const current = document.getElementById('root-input').value.trim();
+  pickerBrowse(current || '~');
+};
+
+window.closePicker = function() {
+  document.getElementById('picker').classList.remove('open');
+};
+
+async function pickerBrowse(path) {
+  pickerCurrentPath = path;
+  document.getElementById('picker-path').textContent = path;
+  document.getElementById('picker-select-label').textContent = `Select: ${path}`;
+
+  const listEl  = document.getElementById('picker-list');
+  const emptyEl = document.getElementById('picker-empty');
+  // Clear existing entries but keep #picker-empty in the DOM
+  Array.from(listEl.children).forEach(c => { if (c.id !== 'picker-empty') c.remove(); });
+  emptyEl.classList.remove('visible');
+
+  try {
+    const r  = await fetch('/widget/api/agent/browse?path=' + encodeURIComponent(path));
+    const dj = await r.json();
+    const dirs = (dj.entries || []).filter(e => e.type === 'dir' && !e.name.startsWith('.'));
+    if (!dirs.length) { emptyEl.classList.add('visible'); return; }
+    dirs.forEach(e => {
+      const el = document.createElement('div');
+      el.className = 'picker-entry';
+      el.innerHTML = `<span class="pe-icon">📁</span><span class="pe-name" title="${e.path}">${e.name}</span>`;
+      el.addEventListener('click', () => pickerBrowse(e.path));
+      listEl.appendChild(el);
+    });
+  } catch {
+    const err = document.createElement('div');
+    err.style.cssText = 'padding:16px;color:var(--red);font-size:12px';
+    err.textContent = 'Could not browse this location.';
+    listEl.appendChild(err);
+  }
+}
+
+window.pickerSelect = async function() {
+  if (!pickerCurrentPath) return;
+  document.getElementById('root-input').value = pickerCurrentPath;
+  closePicker();
+  toast('Path set — click Save Root Path to apply.');
+};
+
+// ── Save root ─────────────────────────────────────────────────────────────────
 window.saveRoot = async function() {
   const root = document.getElementById('root-input').value.trim();
   await fetch('/widget/configure', {
@@ -196,6 +377,7 @@ window.saveRoot = async function() {
   toast('Root path saved.');
 };
 
+// ── Theme ─────────────────────────────────────────────────────────────────────
 window.selectTheme = async function(name) {
   currentTheme = name;
   document.querySelectorAll('.theme-card').forEach(c =>
@@ -217,10 +399,11 @@ window.importTheme = async function(event) {
     applyTheme(theme);
     toast('Theme applied from .wcpt file.');
   } catch {
-    alert('Invalid .wcpt file.');
+    toast('Invalid .wcpt file.');
   }
 };
 
+// ── Download agent ────────────────────────────────────────────────────────────
 window.downloadAgent = async function() {
   const r = await fetch('/widget/agent/installer');
   if (r.ok) {
@@ -232,19 +415,11 @@ window.downloadAgent = async function() {
     a.click();
     document.body.removeChild(a);
   } else {
-    // alert() is blocked inside sandboxed iframes — use toast instead
-    let msg = 'Agent installer not available yet.';
+    let msg = 'Agent installer not available in this image.';
     try { const d = await r.json(); msg = d.message || msg; } catch {}
-    toast(msg);
+    toast(msg, 4000);
   }
 };
-
-function toast(msg) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 2500);
-}
 </script>
 </body>
 </html>
