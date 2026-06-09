@@ -117,11 +117,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   padding:10px 16px;background:var(--surface);
   border-bottom:1px solid var(--border);flex-shrink:0
 }
-#picker-header h3{font-size:14px;flex:1}
-#picker-path{
-  font-size:11px;color:var(--muted);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%;text-align:right
-}
+#picker-header h3{font-size:14px;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
+#picker-path{font-size:12px;color:var(--muted);font-weight:normal}
 #picker-body{display:flex;flex:1;overflow:hidden}
 #picker-sidebar{
   width:180px;flex-shrink:0;background:var(--surface);
@@ -152,6 +149,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   border-top:1px solid var(--border);flex-shrink:0
 }
 #picker-select-label{flex:1;font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#picker-splitter{width:5px;flex-shrink:0;cursor:col-resize;background:var(--border);transition:background .15s;position:relative}
+#picker-splitter:hover,#picker-splitter.dragging{background:var(--accent)}
+#picker-splitter::after{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:2px;height:32px;background:rgba(255,255,255,.25);border-radius:1px}
 #picker-empty{
   display:none;flex-direction:column;align-items:center;justify-content:center;
   height:100%;color:var(--muted);gap:8px;font-size:13px
@@ -291,9 +291,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 <!-- Full-screen folder picker -->
 <div id="picker">
   <div id="picker-header">
-    <h3>Choose Root Folder</h3>
-    <span id="picker-path"></span>
-    <button class="tb-btn" style="margin-left:8px" onclick="closePicker()">✕ Cancel</button>
+    <h3>Choose Root Folder <span id="picker-path"></span></h3>
+    <button class="tb-btn" style="flex-shrink:0;margin-left:8px" onclick="closePicker()">✕ Cancel</button>
   </div>
   <div id="picker-body">
     <div id="picker-sidebar">
@@ -303,6 +302,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
       <div id="picker-sidebar-section" style="margin-top:8px">Locations</div>
       <div id="picker-locs"></div>
     </div>
+    <div id="picker-splitter" title="Drag to resize"></div>
     <div id="picker-list">
       <div id="picker-empty">
         <div>📂</div>
@@ -425,6 +425,31 @@ splitter.addEventListener('mousedown', e => {
     splitter.classList.remove('dragging');
     document.body.style.cursor = ''; document.body.style.userSelect = '';
     localStorage.setItem(SPLITTER_KEY, sidecar.offsetWidth);
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+  }
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+});
+
+// ── Picker splitter ───────────────────────────────────────────────────────────
+const PICKER_KEY = 'md-explorer:picker-sidebar-width';
+const PICKER_MIN = 120, PICKER_MAX = 300;
+const pickerSidebarEl  = document.getElementById('picker-sidebar');
+const pickerSplitterEl = document.getElementById('picker-splitter');
+const savedPW = parseInt(localStorage.getItem(PICKER_KEY));
+if (savedPW && savedPW >= PICKER_MIN && savedPW <= PICKER_MAX) pickerSidebarEl.style.width = savedPW + 'px';
+pickerSplitterEl.addEventListener('mousedown', e => {
+  e.preventDefault();
+  const startX = e.clientX, startW = pickerSidebarEl.offsetWidth;
+  pickerSplitterEl.classList.add('dragging');
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  function move(ev) { pickerSidebarEl.style.width = Math.max(PICKER_MIN, Math.min(PICKER_MAX, startW + ev.clientX - startX)) + 'px'; }
+  function up() {
+    pickerSplitterEl.classList.remove('dragging');
+    document.body.style.cursor = ''; document.body.style.userSelect = '';
+    localStorage.setItem(PICKER_KEY, pickerSidebarEl.offsetWidth);
     document.removeEventListener('mousemove', move);
     document.removeEventListener('mouseup', up);
   }
