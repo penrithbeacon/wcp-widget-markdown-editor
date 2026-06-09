@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Markdown Editor — Settings</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+*::-webkit-scrollbar{width:8px;height:8px}
+*::-webkit-scrollbar-track{background:var(--surface2)}
+*::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+*::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+:root{--bg:#1e1e2e;--surface:#2a2a3e;--surface2:#313145;--border:#44445a;--text:#cdd6f4;--muted:#7f849c;--accent:#89b4fa;--green:#a6e3a1;--red:#f38ba8;--yellow:#f9e2af}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:14px;overflow-y:auto}
+.page{max-width:640px;margin:0 auto;padding:24px 20px}
+h1{font-size:18px;color:var(--accent);margin-bottom:20px}
+.section{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px}
+.section h2{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:5px}
+.field input,.field select{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px 10px;color:var(--text);font-size:14px;outline:none}
+.field input:focus,.field select:focus{border-color:var(--accent)}
+.field .hint{font-size:11px;color:var(--muted);margin-top:4px}
+.btn-row{display:flex;gap:8px;margin-top:4px}
+.btn{padding:6px 14px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;font-size:13px}
+.btn:hover{background:var(--border)}
+.btn.primary{background:var(--accent);color:#1e1e2e;border-color:var(--accent)}
+.btn.primary:hover{opacity:.9}
+.port-display{font-family:monospace;font-size:15px;color:var(--green);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 12px;display:inline-block}
+.theme-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.theme-card{border:2px solid var(--border);border-radius:6px;padding:8px;cursor:pointer;text-align:center;font-size:12px;transition:border-color .15s}
+.theme-card:hover{border-color:var(--muted)}
+.theme-card.active{border-color:var(--accent)}
+.theme-swatch{height:28px;border-radius:3px;margin-bottom:6px}
+.agent-status{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:6px;background:var(--surface2);border:1px solid var(--border)}
+.agent-dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.agent-dot.ok{background:var(--green)}
+.agent-dot.err{background:var(--red)}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--accent);color:#1e1e2e;padding:8px 20px;border-radius:20px;font-size:13px;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>⚙️ Markdown Editor Settings</h1>
+
+  <!-- Port -->
+  <div class="section">
+    <h2>Widget Port</h2>
+    <div class="port-display">:{{ port }}</div>
+    <p style="font-size:12px;color:var(--muted);margin-top:8px">
+      This widget is served on port {{ port }}. Update your dashboard registration if you change this.
+    </p>
+  </div>
+
+  <!-- Root folder -->
+  <div class="section">
+    <h2>Root Folder</h2>
+    <div class="field">
+      <label>Workspace root path</label>
+      <input id="root-input" type="text" value="{{ root }}"
+             placeholder="e.g. /documents  (relative to /workspace mount)" />
+      <div class="hint">
+        Path is relative to the Docker volume mount point (<code>/workspace</code>).
+        To use a different host path, update the volume mapping in <code>docker-compose.yml</code>
+        and restart the container.
+        <span id="agent-path-hint" style="display:none">
+          With the companion agent running, you can use the folder picker in the Explorer
+          to browse the host filesystem.
+        </span>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn primary" onclick="saveRoot()">Save Root Path</button>
+    </div>
+  </div>
+
+  <!-- Agent -->
+  <div class="section">
+    <h2>Companion Agent</h2>
+    <div class="agent-status">
+      <div class="agent-dot" id="agent-dot"></div>
+      <div id="agent-status-text" style="flex:1;font-size:13px">Checking…</div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-top:10px">
+      The companion agent runs natively on your Mac and enables host filesystem browsing.
+      Install it once — it starts automatically at login.
+    </p>
+    <div class="btn-row" style="margin-top:10px">
+      <button class="btn primary" onclick="downloadAgent()">⬇ Download Agent Installer</button>
+      <button class="btn" onclick="window.open('https://github.com/HarrisonOfTheNorth/wcp-agent-markdown-editor','_blank')">View on GitHub</button>
+    </div>
+    <div class="field" style="margin-top:12px">
+      <label>Agent port</label>
+      <div class="port-display">:{{ agent_port }}</div>
+    </div>
+  </div>
+
+  <!-- Themes -->
+  <div class="section">
+    <h2>Theme</h2>
+    <div class="theme-grid" id="theme-grid">
+      <div class="theme-card" data-theme="default" onclick="selectTheme('default')">
+        <div class="theme-swatch" style="background:linear-gradient(135deg,#1e1e2e,#89b4fa)"></div>
+        Mocha (default)
+      </div>
+      <div class="theme-card" data-theme="latte" onclick="selectTheme('latte')">
+        <div class="theme-swatch" style="background:linear-gradient(135deg,#eff1f5,#1e66f5)"></div>
+        Latte
+      </div>
+      <div class="theme-card" data-theme="frappe" onclick="selectTheme('frappe')">
+        <div class="theme-swatch" style="background:linear-gradient(135deg,#303446,#8caaee)"></div>
+        Frappé
+      </div>
+    </div>
+    <div class="field" style="margin-top:12px">
+      <label>Import custom theme (.wcpt)</label>
+      <input type="file" id="theme-file" accept=".wcpt" onchange="importTheme(event)" />
+      <div class="hint">A .wcpt file exported from Penrith Beacon Theme Studio.</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+// WCP theme reception
+window.parent.postMessage({ type: 'wcp:ready' }, '*');
+window.parent.postMessage({ type: 'wcp:request-theme' }, '*');
+(function() {
+  const m = location.hash.match(/[#&]wcp:theme=([^&]*)/);
+  if (m) applyTheme(JSON.parse(decodeURIComponent(m[1])));
+})();
+window.addEventListener('message', e => {
+  if ((e.data?.type === 'wcp:theme' || e.data?.type === 'wcp:context') && e.data.theme)
+    applyTheme(e.data.theme);
+});
+function applyTheme(t) {
+  Object.entries(t).forEach(([k,v]) => document.documentElement.style.setProperty(k, v));
+}
+
+const INSTANCE_ID = '{{ instance_id }}';
+const PORT        = {{ port }};
+let   currentTheme = '{{ theme }}';
+
+// Mark active theme card
+document.querySelectorAll('.theme-card').forEach(c => {
+  if (c.dataset.theme === currentTheme) c.classList.add('active');
+});
+
+// Check agent
+async function checkAgent() {
+  try {
+    const r = await fetch('/widget/api/agent/status');
+    const d = await r.json();
+    const dot  = document.getElementById('agent-dot');
+    const text = document.getElementById('agent-status-text');
+    const hint = document.getElementById('agent-path-hint');
+    if (d.available) {
+      dot.className  = 'agent-dot ok';
+      text.textContent = `Companion agent connected (v${d.agent?.version || '?'})`;
+      hint.style.display = 'inline';
+    } else {
+      dot.className  = 'agent-dot err';
+      text.textContent = 'Companion agent not detected — download and install below.';
+      hint.style.display = 'none';
+    }
+  } catch {}
+}
+checkAgent();
+
+window.saveRoot = async function() {
+  const root = document.getElementById('root-input').value.trim();
+  await fetch('/widget/configure', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'Wcp-Instance-Id': INSTANCE_ID },
+    body:    JSON.stringify({ root })
+  });
+  toast('Root path saved.');
+};
+
+window.selectTheme = async function(name) {
+  currentTheme = name;
+  document.querySelectorAll('.theme-card').forEach(c =>
+    c.classList.toggle('active', c.dataset.theme === name));
+  await fetch('/widget/configure', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'Wcp-Instance-Id': INSTANCE_ID },
+    body:    JSON.stringify({ theme: name })
+  });
+  toast('Theme saved.');
+};
+
+window.importTheme = async function(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  try {
+    const text  = await file.text();
+    const theme = JSON.parse(text);
+    applyTheme(theme);
+    toast('Theme applied from .wcpt file.');
+  } catch {
+    alert('Invalid .wcpt file.');
+  }
+};
+
+window.downloadAgent = async function() {
+  const r = await fetch('/widget/agent/installer');
+  if (r.ok) {
+    const blob = await r.blob();
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
+    a.download = 'wcp-agent-markdown-editor.pkg';
+    a.click();
+  } else {
+    const d = await r.json();
+    alert(d.message || 'Agent installer not available yet.');
+  }
+};
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>

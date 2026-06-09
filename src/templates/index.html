@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Markdown Editor — Widget Index</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#1e1e2e;--surface:#2a2a3e;--surface2:#313145;--border:#44445a;--text:#cdd6f4;--muted:#7f849c;--accent:#89b4fa}
+html,body{background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:14px;padding:20px}
+h1{font-size:18px;color:var(--accent);margin-bottom:6px}
+.sub{color:var(--muted);font-size:12px;margin-bottom:20px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px;display:flex;align-items:center;gap:14px}
+.card-icon{font-size:24px;flex-shrink:0}
+.card-body{flex:1}
+.card-name{font-size:14px;font-weight:500;margin-bottom:3px}
+.card-desc{font-size:12px;color:var(--muted)}
+.card-link{font-size:12px;color:var(--accent);text-decoration:none;margin-top:5px;display:block}
+.badge{font-size:11px;padding:1px 7px;border-radius:10px;border:1px solid var(--border);color:var(--muted);margin-left:8px}
+</style>
+</head>
+<body>
+<h1>📄 Markdown Editor</h1>
+<div class="sub">v{{ version }} &nbsp;·&nbsp; WCP 2.1.0 &nbsp;·&nbsp; penrithbeacon/wcp-widget-markdown-editor</div>
+
+<div class="card">
+  <div class="card-icon">📝</div>
+  <div class="card-body">
+    <div class="card-name">Markdown Explorer <span class="badge">widget · 12×12</span></div>
+    <div class="card-desc">WYSIWYG markdown editor with folder tree sidecar. Open, edit, and save .md files.</div>
+    <a class="card-link" href="/widget/">Open Markdown Explorer →</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-icon">⚙️</div>
+  <div class="card-body">
+    <div class="card-name">Settings <span class="badge">widget · 12×12</span></div>
+    <div class="card-desc">Configure root folder path, themes, and companion agent.</div>
+    <a class="card-link" href="/widget/settings/">Open Settings →</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-icon">ℹ️</div>
+  <div class="card-body">
+    <div class="card-name">About <span class="badge">widget · 12×12</span></div>
+    <div class="card-desc">Widget version, OCI image path, author information.</div>
+    <a class="card-link" href="/widget/about/">Open About →</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-icon">🔌</div>
+  <div class="card-body">
+    <div class="card-name">API Endpoints</div>
+    <div class="card-desc">
+      <code>GET /wcp</code> · <code>GET /widget/wcp</code> · <code>GET /widget/health</code><br>
+      <code>GET /widget/api/guids</code> · <code>POST /widget/configure</code><br>
+      <code>POST /widget/publish</code> · <code>GET /widget/export.wcp</code><br>
+      <code>GET /widget/agent/installer</code> · <code>GET /widget/logs</code>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+window.parent.postMessage({ type: 'wcp:ready' }, '*');
+window.parent.postMessage({ type: 'wcp:request-theme' }, '*');
+window.addEventListener('message', e => {
+  if ((e.data?.type === 'wcp:theme' || e.data?.type === 'wcp:context') && e.data.theme)
+    Object.entries(e.data.theme).forEach(([k,v]) => document.documentElement.style.setProperty(k,v));
+});
+</script>
+</body>
+</html>

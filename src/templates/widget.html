@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Markdown Explorer</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+*::-webkit-scrollbar{width:8px;height:8px}
+*::-webkit-scrollbar-track{background:var(--surface2)}
+*::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+*::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+*{scrollbar-color:var(--border) var(--surface2);scrollbar-width:thin}
+
+:root{
+  --bg:#1e1e2e;--surface:#2a2a3e;--surface2:#313145;--border:#44445a;
+  --text:#cdd6f4;--muted:#7f849c;--accent:#89b4fa;--green:#a6e3a1;
+  --red:#f38ba8;--yellow:#f9e2af
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:system-ui,sans-serif;font-size:14px}
+
+/* Layout */
+#app{display:flex;flex-direction:column;height:100%}
+#toolbar{display:flex;align-items:center;gap:6px;padding:6px 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+#main{display:flex;flex:1;overflow:hidden}
+
+/* Toolbar */
+.tb-btn{display:flex;align-items:center;gap:4px;padding:4px 10px;border:1px solid var(--border);border-radius:4px;background:var(--surface2);color:var(--text);cursor:pointer;font-size:13px;transition:background .15s}
+.tb-btn:hover{background:var(--border)}
+.tb-btn.primary{background:var(--accent);color:#1e1e2e;border-color:var(--accent)}
+.tb-btn.primary:hover{opacity:.9}
+.tb-btn:disabled{opacity:.4;cursor:default}
+#file-label{flex:1;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#agent-badge{font-size:11px;padding:2px 7px;border-radius:10px;background:var(--surface2);border:1px solid var(--border)}
+#agent-badge.ok{border-color:var(--green);color:var(--green)}
+#agent-badge.err{border-color:var(--red);color:var(--red)}
+
+/* Sidecar */
+#sidecar{width:220px;flex-shrink:0;display:flex;flex-direction:column;background:var(--surface);border-right:1px solid var(--border);overflow:hidden}
+#breadcrumb{padding:6px 10px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+#file-tree{flex:1;overflow-y:auto;padding:4px 0}
+#sidecar-footer{padding:4px 8px;border-top:1px solid var(--border);display:flex;gap:4px;flex-shrink:0}
+.sidecar-btn{flex:1;padding:4px;border:1px solid var(--border);border-radius:3px;background:var(--surface2);color:var(--muted);cursor:pointer;font-size:12px;text-align:center}
+.sidecar-btn:hover{color:var(--text);border-color:var(--accent)}
+
+/* Splitter */
+#splitter{width:5px;flex-shrink:0;cursor:col-resize;background:var(--border);transition:background .15s;position:relative}
+#splitter:hover,#splitter.dragging{background:var(--accent)}
+#splitter::after{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:2px;height:32px;background:rgba(255,255,255,.25);border-radius:1px}
+
+/* Editor pane */
+#editor-pane{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+#editor-toolbar{display:flex;gap:4px;padding:6px 10px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;flex-wrap:wrap}
+.fmt-btn{padding:3px 8px;border:1px solid var(--border);border-radius:3px;background:var(--surface2);color:var(--text);cursor:pointer;font-size:13px;min-width:28px;text-align:center}
+.fmt-btn:hover{background:var(--border)}
+.fmt-btn.active{background:var(--accent);color:#1e1e2e;border-color:var(--accent)}
+.fmt-sep{width:1px;background:var(--border);margin:0 4px}
+#editor-scroll{flex:1;overflow-y:auto;padding:16px 20px}
+
+/* TipTap editor */
+.tiptap{outline:none;min-height:100%;line-height:1.7;color:var(--text)}
+.tiptap h1{font-size:1.8em;margin:.5em 0 .3em;color:var(--accent)}
+.tiptap h2{font-size:1.4em;margin:.5em 0 .3em;color:var(--accent)}
+.tiptap h3{font-size:1.2em;margin:.5em 0 .3em;color:var(--accent)}
+.tiptap p{margin:.4em 0}
+.tiptap strong{color:var(--yellow)}
+.tiptap em{color:var(--green)}
+.tiptap code{background:var(--surface2);padding:1px 5px;border-radius:3px;font-family:monospace;font-size:.9em}
+.tiptap pre{background:var(--surface2);padding:12px;border-radius:6px;overflow-x:auto;font-family:monospace;font-size:.9em;margin:.6em 0;border:1px solid var(--border)}
+.tiptap ul,
+.tiptap ol{margin:.4em 0;padding-left:1.6em}
+.tiptap blockquote{border-left:3px solid var(--accent);padding-left:12px;margin:.4em 0;color:var(--muted)}
+.tiptap a{color:var(--accent)}
+.tiptap hr{border:none;border-top:1px solid var(--border);margin:1em 0}
+
+/* File tree items */
+.tree-item{display:flex;align-items:center;gap:6px;padding:4px 12px;cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden}
+.tree-item:hover{background:var(--surface2)}
+.tree-item.selected{background:var(--surface2);color:var(--accent)}
+.tree-item .icon{flex-shrink:0;font-size:13px}
+.tree-item .name{flex:1;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+
+/* Empty / notice states */
+#empty-notice{display:none;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:12px;color:var(--muted);text-align:center;padding:20px}
+#empty-notice.visible{display:flex}
+#empty-notice a{color:var(--accent);cursor:pointer;text-decoration:underline}
+
+/* Modals */
+.modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center}
+.modal-backdrop.open{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;min-width:320px;display:flex;flex-direction:column;gap:12px}
+.modal h3{font-size:15px;color:var(--text)}
+.modal input{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:7px 10px;color:var(--text);font-size:14px;width:100%;outline:none}
+.modal input:focus{border-color:var(--accent)}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Toolbar -->
+  <div id="toolbar">
+    <button class="tb-btn primary" id="btn-new" onclick="newFile()">＋ New</button>
+    <button class="tb-btn" id="btn-save" onclick="saveFile()" disabled>💾 Save</button>
+    <button class="tb-btn" id="btn-rename" onclick="renameItem()" disabled>✏️ Rename</button>
+    <button class="tb-btn" id="btn-delete" onclick="deleteItem()" disabled>🗑 Delete</button>
+    <button class="tb-btn" id="btn-publish" onclick="publishDoc()" disabled>🌐 Publish</button>
+    <div id="file-label">No file open</div>
+    <span id="agent-badge" class="err">agent: checking…</span>
+  </div>
+
+  <div id="main">
+    <!-- Sidecar -->
+    <div id="sidecar">
+      <div id="breadcrumb" title="/">📁 /</div>
+      <div id="file-tree"></div>
+      <div id="sidecar-footer">
+        <button class="sidecar-btn" onclick="newFolder()" title="New folder">📁＋</button>
+        <button class="sidecar-btn" id="btn-up" onclick="navigateUp()" title="Up">↑</button>
+      </div>
+    </div>
+
+    <!-- Splitter -->
+    <div id="splitter" title="Drag to resize"></div>
+
+    <!-- Editor pane -->
+    <div id="editor-pane">
+      <div id="editor-toolbar">
+        <button class="fmt-btn" onclick="cmd('bold')" title="Bold"><b>B</b></button>
+        <button class="fmt-btn" onclick="cmd('italic')" title="Italic"><i>I</i></button>
+        <button class="fmt-btn" onclick="cmd('underline')" title="Underline"><u>U</u></button>
+        <button class="fmt-btn" onclick="cmd('strike')" title="Strikethrough"><s>S</s></button>
+        <div class="fmt-sep"></div>
+        <button class="fmt-btn" onclick="cmd('h1')" title="Heading 1">H1</button>
+        <button class="fmt-btn" onclick="cmd('h2')" title="Heading 2">H2</button>
+        <button class="fmt-btn" onclick="cmd('h3')" title="Heading 3">H3</button>
+        <div class="fmt-sep"></div>
+        <button class="fmt-btn" onclick="cmd('bulletList')" title="Bullet list">•</button>
+        <button class="fmt-btn" onclick="cmd('orderedList')" title="Numbered list">1.</button>
+        <button class="fmt-btn" onclick="cmd('blockquote')" title="Blockquote">"</button>
+        <button class="fmt-btn" onclick="cmd('code')" title="Inline code">&lt;/&gt;</button>
+        <button class="fmt-btn" onclick="cmd('codeBlock')" title="Code block">```</button>
+        <div class="fmt-sep"></div>
+        <button class="fmt-btn" onclick="cmd('undo')" title="Undo">↩</button>
+        <button class="fmt-btn" onclick="cmd('redo')" title="Redo">↪</button>
+        <button class="fmt-btn" onclick="cmd('hr')" title="Horizontal rule">—</button>
+      </div>
+      <div id="editor-scroll">
+        <div id="empty-notice">
+          <div style="font-size:2em">📄</div>
+          <div>Select a file to open it, or <a onclick="newFile()">create a new one</a>.</div>
+          <div id="no-root-msg" style="display:none;font-size:12px">
+            No root folder configured. <a onclick="openSettings()">Open Settings</a> to set one.
+          </div>
+        </div>
+        <div id="editor-mount"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New file modal -->
+<div class="modal-backdrop" id="modal-new">
+  <div class="modal">
+    <h3>New File</h3>
+    <input id="new-filename" placeholder="filename.md" />
+    <div class="modal-actions">
+      <button class="tb-btn" onclick="closeModal('modal-new')">Cancel</button>
+      <button class="tb-btn primary" onclick="confirmNewFile()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- New folder modal -->
+<div class="modal-backdrop" id="modal-folder">
+  <div class="modal">
+    <h3>New Folder</h3>
+    <input id="new-foldername" placeholder="folder-name" />
+    <div class="modal-actions">
+      <button class="tb-btn" onclick="closeModal('modal-folder')">Cancel</button>
+      <button class="tb-btn primary" onclick="confirmNewFolder()">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rename modal -->
+<div class="modal-backdrop" id="modal-rename">
+  <div class="modal">
+    <h3>Rename</h3>
+    <input id="rename-value" placeholder="new name" />
+    <div class="modal-actions">
+      <button class="tb-btn" onclick="closeModal('modal-rename')">Cancel</button>
+      <button class="tb-btn primary" onclick="confirmRename()">Rename</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { Editor } from 'https://esm.sh/@tiptap/core@2.4.0';
+import StarterKit from 'https://esm.sh/@tiptap/starter-kit@2.4.0';
+import Underline from 'https://esm.sh/@tiptap/extension-underline@2.4.0';
+
+// Markdown libs via CDN
+const marked   = window.marked;
+const turndown = window.TurndownService;
+
+const PORT        = {{ port }};
+const INSTANCE_ID = '{{ instance_id }}';
+let   rootPath    = '{{ root }}';
+let   currentDir  = '';
+let   currentFile = null;
+let   editor;
+let   dirty       = false;
+
+// ── TipTap init ──────────────────────────────────────────────────────────────
+editor = new Editor({
+  element:    document.getElementById('editor-mount'),
+  extensions: [StarterKit, Underline],
+  content:    '',
+  editorProps: { attributes: { class: 'tiptap' } },
+  onUpdate: () => {
+    dirty = true;
+    document.getElementById('btn-save').disabled = false;
+  }
+});
+
+// expose globally for toolbar buttons
+window._editor = editor;
+
+window.cmd = function(name) {
+  const c = editor.chain().focus();
+  switch(name) {
+    case 'bold':        c.toggleBold().run(); break;
+    case 'italic':      c.toggleItalic().run(); break;
+    case 'underline':   c.toggleUnderline().run(); break;
+    case 'strike':      c.toggleStrike().run(); break;
+    case 'h1':          c.toggleHeading({level:1}).run(); break;
+    case 'h2':          c.toggleHeading({level:2}).run(); break;
+    case 'h3':          c.toggleHeading({level:3}).run(); break;
+    case 'bulletList':  c.toggleBulletList().run(); break;
+    case 'orderedList': c.toggleOrderedList().run(); break;
+    case 'blockquote':  c.toggleBlockquote().run(); break;
+    case 'code':        c.toggleCode().run(); break;
+    case 'codeBlock':   c.toggleCodeBlock().run(); break;
+    case 'undo':        c.undo().run(); break;
+    case 'redo':        c.redo().run(); break;
+    case 'hr':          c.setHorizontalRule().run(); break;
+  }
+};
+
+// ── WCP theme reception ───────────────────────────────────────────────────────
+window.parent.postMessage({ type: 'wcp:ready' }, '*');
+window.parent.postMessage({ type: 'wcp:request-theme' }, '*');
+(function() {
+  const h = location.hash;
+  const m = h.match(/[#&]wcp:theme=([^&]*)/);
+  if (m) applyTheme(JSON.parse(decodeURIComponent(m[1])));
+})();
+window.addEventListener('message', e => {
+  if (e.data?.type === 'wcp:theme' || e.data?.type === 'wcp:context')
+    if (e.data.theme) applyTheme(e.data.theme);
+});
+function applyTheme(t) {
+  Object.entries(t).forEach(([k,v]) => document.documentElement.style.setProperty(k, v));
+}
+
+// ── Splitter ─────────────────────────────────────────────────────────────────
+const KEY = 'md-explorer:sidebar-width';
+const MIN = 140, MAX = 420;
+const sidecar  = document.getElementById('sidecar');
+const splitter = document.getElementById('splitter');
+const saved    = parseInt(localStorage.getItem(KEY));
+if (saved && saved >= MIN && saved <= MAX) sidecar.style.width = saved + 'px';
+splitter.addEventListener('mousedown', e => {
+  e.preventDefault();
+  const startX = e.clientX, startW = sidecar.offsetWidth;
+  splitter.classList.add('dragging');
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  function move(ev) {
+    sidecar.style.width = Math.max(MIN, Math.min(MAX, startW + ev.clientX - startX)) + 'px';
+  }
+  function up() {
+    splitter.classList.remove('dragging');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    localStorage.setItem(KEY, sidecar.offsetWidth);
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+  }
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+});
+
+// ── Agent status ──────────────────────────────────────────────────────────────
+async function checkAgent() {
+  try {
+    const r = await fetch(`/widget/api/agent/status`);
+    const d = await r.json();
+    const badge = document.getElementById('agent-badge');
+    if (d.available) {
+      badge.textContent = 'agent: connected';
+      badge.className   = 'ok';
+    } else {
+      badge.textContent = 'agent: offline';
+      badge.className   = 'err';
+    }
+  } catch {}
+}
+checkAgent();
+setInterval(checkAgent, 30000);
+
+// ── File tree ─────────────────────────────────────────────────────────────────
+async function loadDir(rel) {
+  if (!rootPath) {
+    document.getElementById('empty-notice').classList.add('visible');
+    document.getElementById('no-root-msg').style.display = 'block';
+    document.getElementById('file-tree').innerHTML = '';
+    return;
+  }
+  currentDir = rel;
+  try {
+    const r = await fetch(`/widget/api/files/list?path=${encodeURIComponent(rel)}`,
+      { headers: { 'Wcp-Instance-Id': INSTANCE_ID } });
+    const d = await r.json();
+    if (d.error) { showNoRoot(); return; }
+    renderTree(d.entries, rel);
+    // breadcrumb
+    const bc = document.getElementById('breadcrumb');
+    bc.textContent = '📁 ' + (rel || '/');
+    bc.title       = rel || '/';
+    document.getElementById('btn-up').disabled = !rel;
+  } catch { showNoRoot(); }
+}
+
+function showNoRoot() {
+  document.getElementById('empty-notice').classList.add('visible');
+  document.getElementById('no-root-msg').style.display = 'block';
+}
+
+function renderTree(entries, dirRel) {
+  const tree = document.getElementById('file-tree');
+  tree.innerHTML = '';
+  document.getElementById('empty-notice').classList.remove('visible');
+  entries.forEach(e => {
+    const rel  = dirRel ? `${dirRel}/${e.name}` : e.name;
+    const item = document.createElement('div');
+    item.className = 'tree-item';
+    item.innerHTML = `<span class="icon">${e.type === 'dir' ? '📁' : '📄'}</span>
+                      <span class="name" title="${e.name}">${e.name}</span>`;
+    item.dataset.path = rel;
+    item.dataset.type = e.type;
+    if (e.type === 'dir') {
+      let clickTimer;
+      item.addEventListener('click', () => {
+        clearTimeout(clickTimer);
+        // single-click: select (enables subfolder button)
+        document.querySelectorAll('.tree-item').forEach(x => x.classList.remove('selected'));
+        item.classList.add('selected');
+        currentFile = null;
+        updateToolbar();
+      });
+      item.addEventListener('dblclick', () => {
+        clearTimeout(clickTimer);
+        loadDir(rel);
+      });
+    } else if (e.ext === '.md') {
+      item.addEventListener('click', () => {
+        document.querySelectorAll('.tree-item').forEach(x => x.classList.remove('selected'));
+        item.classList.add('selected');
+        openFile(rel, e.name);
+      });
+    }
+    tree.appendChild(item);
+  });
+}
+
+// ── Open file ─────────────────────────────────────────────────────────────────
+async function openFile(rel, name) {
+  if (dirty && !confirm('Unsaved changes. Continue?')) return;
+  try {
+    const r = await fetch(`/widget/api/files/read?path=${encodeURIComponent(rel)}`,
+      { headers: { 'Wcp-Instance-Id': INSTANCE_ID } });
+    const d = await r.json();
+    if (d.error) { alert(d.error); return; }
+    // Convert markdown → HTML → TipTap
+    const html = window.marked ? window.marked.parse(d.content) : `<pre>${d.content}</pre>`;
+    editor.commands.setContent(html);
+    currentFile = rel;
+    dirty = false;
+    document.getElementById('file-label').textContent = name;
+    document.getElementById('btn-save').disabled    = true;
+    document.getElementById('btn-rename').disabled  = false;
+    document.getElementById('btn-delete').disabled  = false;
+    document.getElementById('btn-publish').disabled = false;
+    document.getElementById('empty-notice').classList.remove('visible');
+    document.getElementById('editor-mount').style.display = 'block';
+  } catch(e) { alert('Failed to open file: ' + e.message); }
+}
+
+// ── Save ─────────────────────────────────────────────────────────────────────
+window.saveFile = async function() {
+  if (!currentFile) return;
+  const html  = editor.getHTML();
+  // Convert HTML → markdown via Turndown
+  const md    = window.TurndownService
+    ? new window.TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' }).turndown(html)
+    : html;
+  await fetch('/widget/api/files/save', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'Wcp-Instance-Id': INSTANCE_ID },
+    body:    JSON.stringify({ path: currentFile, content: md })
+  });
+  dirty = false;
+  document.getElementById('btn-save').disabled = true;
+};
+
+// ── New file ─────────────────────────────────────────────────────────────────
+window.newFile = function() {
+  document.getElementById('new-filename').value = '';
+  document.getElementById('modal-new').classList.add('open');
+  setTimeout(() => document.getElementById('new-filename').focus(), 50);
+};
+window.confirmNewFile = async function() {
+  let name = document.getElementById('new-filename').value.trim();
+  if (!name) return;
+  if (!name.endsWith('.md')) name += '.md';
+  const rel = currentDir ? `${currentDir}/${name}` : name;
+  await fetch('/widget/api/files/save', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'Wcp-Instance-Id': INSTANCE_ID },
+    body:    JSON.stringify({ path: rel, content: `# ${name.replace('.md','')}\\n\\n` })
+  });
+  closeModal('modal-new');
+  await loadDir(currentDir);
+  openFile(rel, name);
+};
+
+// ── New folder ────────────────────────────────────────────────────────────────
+window.newFolder = function() {
+  document.getElementById('new-foldername').value = '';
+  document.getElementById('modal-folder').classList.add('open');
+  setTimeout(() => document.getElementById('new-foldername').focus(), 50);
+};
+window.confirmNewFolder = async function() {
+  const name = document.getElementById('new-foldername').value.trim();
+  if (!name) return;
+  const rel = currentDir ? `${currentDir}/${name}` : name;
+  await fetch('/widget/api/files/mkdir', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'Wcp-Instance-Id': INSTANCE_ID },
+    body:    JSON.stringify({ path: rel })
+  });
+  closeModal('modal-folder');
+  await loadDir(currentDir);
+};
+
+// ── Navigate up ───────────────────────────────────────────────────────────────
+window.navigateUp = function() {
+  const parts = currentDir.split('/').filter(Boolean);
+  parts.pop();
+  loadDir(parts.join('/'));
+};
+
+// ── Rename ────────────────────────────────────────────────────────────────────
+window.renameItem = function() {
+  const sel  = document.querySelector('.tree-item.selected') ||
+               (currentFile ? {dataset:{path:currentFile}} : null);
+  if (!sel) return;
+  const name = sel.dataset.path.split('/').pop();
+  document.getElementById('rename-value').value = name;
+  document.getElementById('modal-rename').classList.add('open');
+  setTimeout(() => document.getElementById('rename-value').focus(), 50);
+};
+window.confirmRename = async function() {
+  const sel     = document.querySelector('.tree-item.selected');
+  const oldPath = sel?.dataset.path || currentFile;
+  if (!oldPath) return;
+  const newName = document.getElementById('rename-value').value.trim();
+  if (!newName) return;
+  const dir     = oldPath.split('/').slice(0, -1).join('/');
+  const newPath = dir ? `${dir}/${newName}` : newName;
+  await fetch('/widget/api/files/rename', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'Wcp-Instance-Id': INSTANCE_ID },
+    body:    JSON.stringify({ old: oldPath, new: newPath })
+  });
+  closeModal('modal-rename');
+  if (currentFile === oldPath) {
+    currentFile = newPath;
+    document.getElementById('file-label').textContent = newName;
+  }
+  await loadDir(currentDir);
+};
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+window.deleteItem = async function() {
+  const sel    = document.querySelector('.tree-item.selected');
+  const target = sel?.dataset.path || currentFile;
+  if (!target) return;
+  if (!confirm(`Delete "${target.split('/').pop()}"?`)) return;
+  await fetch('/widget/api/files/delete', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json', 'Wcp-Instance-Id': INSTANCE_ID },
+    body:    JSON.stringify({ path: target })
+  });
+  if (currentFile === target) {
+    currentFile = null;
+    editor.commands.setContent('');
+    document.getElementById('file-label').textContent = 'No file open';
+    document.getElementById('empty-notice').classList.add('visible');
+  }
+  await loadDir(currentDir);
+  updateToolbar();
+};
+
+// ── Publish ───────────────────────────────────────────────────────────────────
+window.publishDoc = async function() {
+  if (!currentFile) return;
+  const html  = editor.getHTML();
+  const title = currentFile.split('/').pop().replace('.md','');
+  const r     = await fetch('/widget/publish', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ html, title })
+  });
+  const d     = await r.json();
+  alert(`Published at ${d.url}`);
+};
+
+// ── Settings link ─────────────────────────────────────────────────────────────
+window.openSettings = function() {
+  window.parent.postMessage({ type: 'wcp:open-component', id: 'settings' }, '*');
+};
+
+// ── Toolbar state ─────────────────────────────────────────────────────────────
+function updateToolbar() {
+  const hasFile = !!currentFile;
+  document.getElementById('btn-save').disabled    = !(hasFile && dirty);
+  document.getElementById('btn-rename').disabled  = !hasFile;
+  document.getElementById('btn-delete').disabled  = !hasFile;
+  document.getElementById('btn-publish').disabled = !hasFile;
+}
+
+// ── Modal helpers ─────────────────────────────────────────────────────────────
+window.closeModal = function(id) {
+  document.getElementById(id).classList.remove('open');
+};
+document.querySelectorAll('.modal-backdrop').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+});
+['new-filename','new-foldername','rename-value'].forEach(id => {
+  document.getElementById(id)?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      if (id === 'new-filename')    window.confirmNewFile();
+      if (id === 'new-foldername') window.confirmNewFolder();
+      if (id === 'rename-value')   window.confirmRename();
+    }
+    if (e.key === 'Escape') {
+      if (id === 'new-filename')    closeModal('modal-new');
+      if (id === 'new-foldername') closeModal('modal-folder');
+      if (id === 'rename-value')   closeModal('modal-rename');
+    }
+  });
+});
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+if (rootPath) {
+  loadDir('');
+} else {
+  document.getElementById('empty-notice').classList.add('visible');
+  document.getElementById('no-root-msg').style.display = 'block';
+}
+</script>
+
+<!-- Markdown / Turndown CDN (non-module, loaded before the module script) -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/turndown/dist/turndown.js"></script>
+</body>
+</html>

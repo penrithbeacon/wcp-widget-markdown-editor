@@ -1,0 +1,19 @@
+services:
+  wcp-widget-markdown-editor:
+    image: penrithbeacon/wcp-widget-markdown-editor:latest
+    container_name: wcp-widget-markdown-editor
+    ports:
+      - "3748:3748"
+    volumes:
+      - markdown_workspace:/workspace
+    environment:
+      - WIDGET_PORT=3748
+      - CONTAINER_NAME=wcp-widget-markdown-editor
+      - AGENT_PORT=3749
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  markdown_workspace:
+    driver: local
