@@ -367,7 +367,9 @@ async function pickerBrowse(path) {
   try {
     const r  = await fetch('/widget/api/agent/browse?path=' + encodeURIComponent(path));
     const dj = await r.json();
-    const dirs = (dj.entries || []).filter(e => e.type === 'dir' && !e.name.startsWith('.'));
+    const dirs = (dj.entries || [])
+      .filter(e => e.type === 'dir' && !e.name.startsWith('.') && !e.name.startsWith('#'))
+      .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
     if (!dirs.length) { emptyEl.classList.add('visible'); return; }
     dirs.forEach(e => {
       const el = document.createElement('div');

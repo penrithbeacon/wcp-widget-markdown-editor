@@ -260,18 +260,20 @@ def list_files():
     except Exception:
         return jsonify({'error': 'agent offline'}), 503
 
-    # Filter to show only directories and .md files; hide dot-names
+    # Filter: hide dot-names, hash-names (e.g. #Recycle Bin); show dirs + .md files only
     raw = data.get('entries', [])
     entries = []
     for e in raw:
         name = e.get('name', '')
-        if name.startswith('.'):
+        if name.startswith('.') or name.startswith('#'):
             continue
         is_dir = e.get('type') == 'dir'
         ext    = e.get('ext', '')
         if not is_dir and ext != '.md':
             continue
         entries.append({'name': name, 'type': e['type'], 'ext': ext})
+    # Sort: dirs first, then files; both groups case-insensitive alphabetical
+    entries.sort(key=lambda e: (0 if e['type'] == 'dir' else 1, e['name'].lower()))
     return jsonify({'path': rel, 'entries': entries})
 
 @app.route('/widget/api/files/read')
