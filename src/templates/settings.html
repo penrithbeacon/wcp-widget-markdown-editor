@@ -137,8 +137,8 @@ if (window.location.hash.startsWith('#wcp-theme=')) {
   if (m) applyTheme(JSON.parse(decodeURIComponent(m[1])));
 })();
 window.addEventListener('message', e => {
-  if ((e.data?.type === 'wcp:theme' || e.data?.type === 'wcp:context') && e.data.theme)
-    applyTheme(e.data.theme);
+  if ((e.data?.type === 'wcp:theme' || e.data?.type === 'wcp:context') && (e.data.vars || e.data.theme))
+    applyTheme(e.data.vars || e.data.theme);
 });
 function applyTheme(t) {
   Object.entries(t).forEach(([k,v]) => document.documentElement.style.setProperty(k, v));
@@ -216,10 +216,14 @@ window.downloadAgent = async function() {
     const a    = document.createElement('a');
     a.href     = URL.createObjectURL(blob);
     a.download = 'wcp-agent-markdown-editor.pkg';
+    document.body.appendChild(a);
     a.click();
+    document.body.removeChild(a);
   } else {
-    const d = await r.json();
-    alert(d.message || 'Agent installer not available yet.');
+    // alert() is blocked inside sandboxed iframes — use toast instead
+    let msg = 'Agent installer not available yet.';
+    try { const d = await r.json(); msg = d.message || msg; } catch {}
+    toast(msg);
   }
 };
 

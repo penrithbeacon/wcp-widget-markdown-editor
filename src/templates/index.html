@@ -72,8 +72,8 @@ if (window.location.hash.startsWith('#wcp-theme=')) {
   } catch {}
 }
 window.addEventListener('message', e => {
-  if ((e.data?.type === 'wcp:theme' || e.data?.type === 'wcp:context') && e.data.theme)
-    Object.entries(e.data.theme).forEach(([k,v]) => document.documentElement.style.setProperty(k,v));
+  if ((e.data?.type === 'wcp:theme' || e.data?.type === 'wcp:context') && (e.data.vars || e.data.theme))
+    Object.entries(e.data.vars || e.data.theme).forEach(([k,v]) => document.documentElement.style.setProperty(k,v));
 });
 </script>
 </body>
