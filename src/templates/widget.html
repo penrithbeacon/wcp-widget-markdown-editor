@@ -84,6 +84,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 #empty-notice.visible{display:flex}
 #empty-notice a{color:var(--accent);cursor:pointer;text-decoration:underline}
 
+/* Toast */
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--accent);color:#1e1e2e;padding:7px 18px;border-radius:20px;font-size:12px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:500;white-space:nowrap}
+.toast.show{opacity:1}
+
 /* Modals */
 .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100;align-items:center;justify-content:center}
 .modal-backdrop.open{display:flex}
@@ -182,6 +186,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   </div>
 </div>
 
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
 <!-- Rename modal -->
 <div class="modal-backdrop" id="modal-rename">
   <div class="modal">
@@ -208,8 +215,17 @@ const INSTANCE_ID = '{{ instance_id }}';
 let   rootPath    = '{{ root }}';
 let   currentDir  = '';
 let   currentFile = null;
+let   selectedFolderPath = null;  // path of single-clicked (selected) folder; null = none
 let   editor;
 let   dirty       = false;
+
+function toast(msg, dur = 2500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), dur);
+}
 
 // ── TipTap init ──────────────────────────────────────────────────────────────
 editor = new Editor({
@@ -248,26 +264,40 @@ window.cmd = function(name) {
 };
 
 // ── WCP theme reception ───────────────────────────────────────────────────────
+// applyTheme sets both the WCP-standard --wcp-color-* vars AND maps them to the
+// widget's internal alias vars (--bg, --surface, etc.) so the CSS responds.
+function applyTheme(t) {
+  const MAP = {
+    '--wcp-color-bg':            '--bg',
+    '--wcp-color-surface':       '--surface',
+    '--wcp-color-surface-raised':'--surface2',
+    '--wcp-color-border':        '--border',
+    '--wcp-color-text':          '--text',
+    '--wcp-color-text-muted':    '--muted',
+    '--wcp-color-primary':       '--accent',
+    '--wcp-color-success':       '--green',
+    '--wcp-color-danger':        '--red',
+    '--wcp-color-warning':       '--yellow',
+  };
+  Object.entries(t).forEach(([k, v]) => {
+    document.documentElement.style.setProperty(k, v);
+    const alias = MAP[k]; if (alias) document.documentElement.style.setProperty(alias, v);
+  });
+}
 window.parent.postMessage({ type: 'wcp:ready' }, '*');
 window.parent.postMessage({ type: 'wcp:request-theme' }, '*');
+// Hash: #wcp-theme=<base64(JSON)> — payload is { uuid, name, vars:{...} }
 if (window.location.hash.startsWith('#wcp-theme=')) {
   try {
-    const _fvars = JSON.parse(atob(window.location.hash.slice(11)));
-    for (const [k, v] of Object.entries(_fvars)) document.documentElement.style.setProperty(k, v);
+    const _p = JSON.parse(atob(window.location.hash.slice(11)));
+    applyTheme(_p.vars || _p);
   } catch {}
 }
-(function() {
-  const h = location.hash;
-  const m = h.match(/[#&]wcp:theme=([^&]*)/);
-  if (m) applyTheme(JSON.parse(decodeURIComponent(m[1])));
-})();
+// Live theme changes from the dashboard via postMessage
 window.addEventListener('message', e => {
   if ((e.data?.type === 'wcp:theme' || e.data?.type === 'wcp:context') && (e.data.vars || e.data.theme))
     applyTheme(e.data.vars || e.data.theme);
 });
-function applyTheme(t) {
-  Object.entries(t).forEach(([k,v]) => document.documentElement.style.setProperty(k, v));
-}
 
 // ── Splitter ─────────────────────────────────────────────────────────────────
 const KEY = 'md-explorer:sidebar-width';
@@ -324,6 +354,7 @@ async function loadDir(rel) {
     return;
   }
   currentDir = rel;
+  selectedFolderPath = null;  // clear folder selection when navigating
   try {
     const r = await fetch(`/widget/api/files/list?path=${encodeURIComponent(rel)}`,
       { headers: { 'Wcp-Instance-Id': INSTANCE_ID } });
@@ -356,23 +387,24 @@ function renderTree(entries, dirRel) {
     item.dataset.path = rel;
     item.dataset.type = e.type;
     if (e.type === 'dir') {
-      let clickTimer;
       item.addEventListener('click', () => {
-        clearTimeout(clickTimer);
-        // single-click: select (enables subfolder button)
+        // Single-click: select folder — new file/folder will be created inside it
         document.querySelectorAll('.tree-item').forEach(x => x.classList.remove('selected'));
         item.classList.add('selected');
+        selectedFolderPath = rel;
         currentFile = null;
         updateToolbar();
       });
       item.addEventListener('dblclick', () => {
-        clearTimeout(clickTimer);
+        // Double-click: navigate into the folder
+        selectedFolderPath = null;
         loadDir(rel);
       });
     } else if (e.ext === '.md') {
       item.addEventListener('click', () => {
         document.querySelectorAll('.tree-item').forEach(x => x.classList.remove('selected'));
         item.classList.add('selected');
+        selectedFolderPath = null;  // file click clears folder selection
         openFile(rel, e.name);
       });
     }
@@ -382,12 +414,17 @@ function renderTree(entries, dirRel) {
 
 // ── Open file ─────────────────────────────────────────────────────────────────
 async function openFile(rel, name) {
-  if (dirty && !confirm('Unsaved changes. Continue?')) return;
+  // Auto-save unsaved changes before opening a different file (confirm() is
+  // blocked inside a sandboxed iframe, so we never block the user with a dialog)
+  if (dirty && currentFile) {
+    await saveFile();
+    toast('Auto-saved before switching files.');
+  }
   try {
     const r = await fetch(`/widget/api/files/read?path=${encodeURIComponent(rel)}`,
       { headers: { 'Wcp-Instance-Id': INSTANCE_ID } });
     const d = await r.json();
-    if (d.error) { alert(d.error); return; }
+    if (d.error) { toast('Error: ' + d.error); return; }
     // Convert markdown → HTML → TipTap
     const html = window.marked ? window.marked.parse(d.content) : `<pre>${d.content}</pre>`;
     editor.commands.setContent(html);
@@ -400,7 +437,7 @@ async function openFile(rel, name) {
     document.getElementById('btn-publish').disabled = false;
     document.getElementById('empty-notice').classList.remove('visible');
     document.getElementById('editor-mount').style.display = 'block';
-  } catch(e) { alert('Failed to open file: ' + e.message); }
+  } catch(e) { toast('Failed to open: ' + e.message); }
 }
 
 // ── Save ─────────────────────────────────────────────────────────────────────
@@ -430,14 +467,17 @@ window.confirmNewFile = async function() {
   let name = document.getElementById('new-filename').value.trim();
   if (!name) return;
   if (!name.endsWith('.md')) name += '.md';
-  const rel = currentDir ? `${currentDir}/${name}` : name;
+  // Create inside selected folder if one is highlighted, otherwise in current dir
+  const targetDir = selectedFolderPath !== null ? selectedFolderPath : currentDir;
+  const rel = targetDir ? `${targetDir}/${name}` : name;
   await fetch('/widget/api/files/save', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', 'Wcp-Instance-Id': INSTANCE_ID },
     body:    JSON.stringify({ path: rel, content: `# ${name.replace('.md','')}\n\n` })
   });
   closeModal('modal-new');
-  await loadDir(currentDir);
+  // Navigate into the folder so the new file is visible
+  await loadDir(targetDir);
   openFile(rel, name);
 };
 
@@ -450,14 +490,19 @@ window.newFolder = function() {
 window.confirmNewFolder = async function() {
   const name = document.getElementById('new-foldername').value.trim();
   if (!name) return;
-  const rel = currentDir ? `${currentDir}/${name}` : name;
+  // Create inside selected folder if one is highlighted, otherwise in current dir
+  const targetDir = selectedFolderPath !== null ? selectedFolderPath : currentDir;
+  const rel = targetDir ? `${targetDir}/${name}` : name;
   await fetch('/widget/api/files/mkdir', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', 'Wcp-Instance-Id': INSTANCE_ID },
     body:    JSON.stringify({ path: rel })
   });
   closeModal('modal-folder');
+  // Stay in current view; if folder was created inside a selected subdir, the
+  // user can double-click that folder to navigate in and see the new subfolder
   await loadDir(currentDir);
+  if (targetDir !== currentDir) toast(`Created inside "${targetDir.split('/').pop()}"`);
 };
 
 // ── Navigate up ───────────────────────────────────────────────────────────────
@@ -503,7 +548,8 @@ window.deleteItem = async function() {
   const sel    = document.querySelector('.tree-item.selected');
   const target = sel?.dataset.path || currentFile;
   if (!target) return;
-  if (!confirm(`Delete "${target.split('/').pop()}"?`)) return;
+  // confirm() is blocked in sandboxed iframes — proceed directly and show toast
+  const shortName = target.split('/').pop();
   await fetch('/widget/api/files/delete', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', 'Wcp-Instance-Id': INSTANCE_ID },
@@ -517,6 +563,7 @@ window.deleteItem = async function() {
   }
   await loadDir(currentDir);
   updateToolbar();
+  toast(`Deleted: ${shortName}`);
 };
 
 // ── Publish ───────────────────────────────────────────────────────────────────
@@ -530,7 +577,7 @@ window.publishDoc = async function() {
     body:    JSON.stringify({ html, title })
   });
   const d     = await r.json();
-  alert(`Published at ${d.url}`);
+  toast(`Published at ${d.url}`, 4000);
 };
 
 // ── Settings link ─────────────────────────────────────────────────────────────

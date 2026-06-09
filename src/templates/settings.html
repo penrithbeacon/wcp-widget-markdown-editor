@@ -124,25 +124,37 @@ h1{font-size:18px;color:var(--accent);margin-bottom:20px}
 
 <script type="module">
 // WCP theme reception
+// applyTheme sets WCP-standard --wcp-color-* vars AND maps them to widget internal aliases.
+function applyTheme(t) {
+  const MAP = {
+    '--wcp-color-bg':            '--bg',
+    '--wcp-color-surface':       '--surface',
+    '--wcp-color-surface-raised':'--surface2',
+    '--wcp-color-border':        '--border',
+    '--wcp-color-text':          '--text',
+    '--wcp-color-text-muted':    '--muted',
+    '--wcp-color-primary':       '--accent',
+    '--wcp-color-success':       '--green',
+    '--wcp-color-danger':        '--red',
+    '--wcp-color-warning':       '--yellow',
+  };
+  Object.entries(t).forEach(([k, v]) => {
+    document.documentElement.style.setProperty(k, v);
+    const alias = MAP[k]; if (alias) document.documentElement.style.setProperty(alias, v);
+  });
+}
 window.parent.postMessage({ type: 'wcp:ready' }, '*');
 window.parent.postMessage({ type: 'wcp:request-theme' }, '*');
 if (window.location.hash.startsWith('#wcp-theme=')) {
   try {
-    const _fvars = JSON.parse(atob(window.location.hash.slice(11)));
-    for (const [k, v] of Object.entries(_fvars)) document.documentElement.style.setProperty(k, v);
+    const _p = JSON.parse(atob(window.location.hash.slice(11)));
+    applyTheme(_p.vars || _p);
   } catch {}
 }
-(function() {
-  const m = location.hash.match(/[#&]wcp:theme=([^&]*)/);
-  if (m) applyTheme(JSON.parse(decodeURIComponent(m[1])));
-})();
 window.addEventListener('message', e => {
   if ((e.data?.type === 'wcp:theme' || e.data?.type === 'wcp:context') && (e.data.vars || e.data.theme))
     applyTheme(e.data.vars || e.data.theme);
 });
-function applyTheme(t) {
-  Object.entries(t).forEach(([k,v]) => document.documentElement.style.setProperty(k, v));
-}
 
 const INSTANCE_ID = '{{ instance_id }}';
 const PORT        = {{ port }};

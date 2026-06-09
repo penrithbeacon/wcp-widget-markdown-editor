@@ -219,11 +219,17 @@ def list_files():
         return jsonify({'error': 'invalid path'}), 400
     entries = []
     for name in sorted(os.listdir(target)):
-        full = os.path.join(target, name)
+        if name.startswith('.'):
+            continue   # hide dot-files and dot-dirs (.published, .widget-config.json, etc.)
+        full  = os.path.join(target, name)
+        is_dir = os.path.isdir(full)
+        ext   = os.path.splitext(name)[1].lower()
+        if not is_dir and ext != '.md':
+            continue   # only .md files visible; all non-hidden dirs visible
         entries.append({
             'name': name,
-            'type': 'dir' if os.path.isdir(full) else 'file',
-            'ext':  os.path.splitext(name)[1].lower()
+            'type': 'dir' if is_dir else 'file',
+            'ext':  ext
         })
     return jsonify({'path': rel, 'entries': entries})
 
@@ -362,7 +368,8 @@ def export_wcp():
 @app.route('/widget/agent/installer')
 def agent_installer():
     # The packaged .pkg installer is bundled into the image at build time.
-    pkg = '/app/agent/wcp-agent-markdown-editor.pkg'
+    # Dockerfile copies src/ → /app/src/, so installers land at /app/src/installers/.
+    pkg = '/app/src/installers/wcp-agent-markdown-editor.pkg'
     if os.path.exists(pkg):
         return send_file(pkg, mimetype='application/octet-stream',
                          download_name='wcp-agent-markdown-editor.pkg')
