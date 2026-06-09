@@ -434,7 +434,7 @@ window.confirmNewFile = async function() {
   await fetch('/widget/api/files/save', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', 'Wcp-Instance-Id': INSTANCE_ID },
-    body:    JSON.stringify({ path: rel, content: `# ${name.replace('.md','')}\\n\\n` })
+    body:    JSON.stringify({ path: rel, content: `# ${name.replace('.md','')}\n\n` })
   });
   closeModal('modal-new');
   await loadDir(currentDir);

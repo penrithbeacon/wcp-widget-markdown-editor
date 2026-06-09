@@ -60,7 +60,11 @@ def save_instance_config(instance_id, config):
     save_json(CONFIG_FILE, all_config)
 
 def instance_id_from_request():
-    return request.headers.get('Wcp-Instance-Id', 'default')
+    # Dashboard passes instance ID as Wcp-Instance-Id header for API calls,
+    # but as ?wcpInstanceId= query param for iframe page loads (browsers cannot
+    # add custom headers to iframe src URLs).
+    return (request.headers.get('Wcp-Instance-Id')
+            or request.args.get('wcpInstanceId', 'default'))
 
 def safe_path(root, rel):
     """Resolve rel against root; return None if it escapes root."""
@@ -171,7 +175,7 @@ def explorer():
     cfg = get_instance_config(iid)
     return render_template('widget.html',
         version=VERSION, port=PORT, instance_id=iid,
-        root=cfg.get('root', ''), agent_port=AGENT_PORT)
+        root=cfg.get('root', '') or WORKSPACE, agent_port=AGENT_PORT)
 
 @app.route('/widget/settings/')
 def settings():
