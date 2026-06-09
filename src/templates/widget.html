@@ -81,6 +81,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .tiptap blockquote{border-left:3px solid var(--accent);padding-left:12px;margin:.4em 0;color:var(--muted)}
 .tiptap a{color:var(--accent)}
 .tiptap hr{border:none;border-top:1px solid var(--border);margin:1em 0}
+.tiptap table{border-collapse:collapse;width:100%;margin:.6em 0}
+.tiptap th,.tiptap td{border:1px solid var(--border);padding:6px 12px;text-align:left;font-size:13px;vertical-align:top}
+.tiptap th{background:var(--surface2);color:var(--accent);font-weight:600}
+.tiptap tr:nth-child(even) td{background:rgba(255,255,255,.02)}
 
 /* ── File tree items ─────────────────────────────────────────────────────── */
 .tree-item{display:flex;align-items:center;gap:6px;padding:4px 12px;cursor:pointer;user-select:none;white-space:nowrap;overflow:hidden}
@@ -321,6 +325,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 import { Editor } from 'https://esm.sh/@tiptap/core@2.4.0';
 import StarterKit from 'https://esm.sh/@tiptap/starter-kit@2.4.0';
 import Underline from 'https://esm.sh/@tiptap/extension-underline@2.4.0';
+import Table from 'https://esm.sh/@tiptap/extension-table@2.4.0';
+import TableRow from 'https://esm.sh/@tiptap/extension-table-row@2.4.0';
+import TableHeader from 'https://esm.sh/@tiptap/extension-table-header@2.4.0';
+import TableCell from 'https://esm.sh/@tiptap/extension-table-cell@2.4.0';
 
 const PORT        = {{ port }};
 const INSTANCE_ID = '{{ instance_id }}';
@@ -347,7 +355,11 @@ window.toast = toast;
 // ── TipTap ───────────────────────────────────────────────────────────────────
 editor = new Editor({
   element:    document.getElementById('editor-mount'),
-  extensions: [StarterKit, Underline],
+  extensions: [
+    StarterKit, Underline,
+    Table.configure({ resizable: false }),
+    TableRow, TableHeader, TableCell,
+  ],
   content:    '',
   editorProps: { attributes: { class: 'tiptap' } },
   onUpdate: () => {
@@ -619,9 +631,12 @@ async function openFile(rel, name) {
 window.saveFile = async function() {
   if (!currentFile) return;
   const html = editor.getHTML();
-  const md   = window.TurndownService
-    ? new window.TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' }).turndown(html)
-    : html;
+  let md = html;
+  if (window.TurndownService) {
+    const td = new window.TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced' });
+    if (window.turndownPluginGfm) td.use(window.turndownPluginGfm.gfm);
+    md = td.turndown(html);
+  }
   await fetch('/widget/api/files/save', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json', 'Wcp-Instance-Id': INSTANCE_ID },
@@ -893,5 +908,6 @@ validateState();
 <!-- Markdown / Turndown CDN -->
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/turndown/dist/turndown.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/turndown-plugin-gfm/dist/turndown-plugin-gfm.js"></script>
 </body>
 </html>
