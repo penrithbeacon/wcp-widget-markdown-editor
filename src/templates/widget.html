@@ -202,6 +202,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <button class="tb-btn" id="btn-rename" onclick="renameItem()" disabled>✏️ Rename</button>
     <button class="tb-btn" id="btn-delete" onclick="deleteItem()" disabled>🗑 Delete</button>
     <button class="tb-btn" id="btn-publish" onclick="publishDoc()" disabled>🌐 Publish</button>
+    <button class="tb-btn" id="btn-unpublish" onclick="unpublishDoc()" style="display:none">✕ Unpublish</button>
     <span id="agent-badge" class="err">agent: checking…</span>
   </div>
 
@@ -746,6 +747,18 @@ window.deleteItem = async function() {
   toast(`Deleted: ${shortName}`);
 };
 
+// ── Publish state ─────────────────────────────────────────────────────────────
+function setPublishedState(published) {
+  document.getElementById('btn-unpublish').style.display = published ? '' : 'none';
+}
+async function checkPublished() {
+  try {
+    const r = await fetch('/widget/wcp');
+    const d = await r.json();
+    setPublishedState(d.web?.published === true);
+  } catch {}
+}
+
 // ── Publish ───────────────────────────────────────────────────────────────────
 window.publishDoc = async function() {
   if (!currentFile) return;
@@ -757,7 +770,14 @@ window.publishDoc = async function() {
     body:    JSON.stringify({ html, title })
   });
   const d = await r.json();
+  setPublishedState(true);
   toast(`Published at ${d.url}`, 4000);
+};
+
+window.unpublishDoc = async function() {
+  await fetch('/widget/publish', { method: 'DELETE' });
+  setPublishedState(false);
+  toast('Unpublished.');
 };
 
 // ── Toolbar state ─────────────────────────────────────────────────────────────
@@ -904,6 +924,7 @@ window.pickerSelect = async function() {
 // We add two thin proxy routes in app.py: /widget/api/agent/browse and /widget/api/agent/drives
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
+checkPublished();
 validateState();
 </script>
 
