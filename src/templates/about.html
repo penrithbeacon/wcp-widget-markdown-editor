@@ -107,12 +107,14 @@ function applyTheme(t) {
 }
 window.parent.postMessage({ type: 'wcp:ready' }, '*');
 window.parent.postMessage({ type: 'wcp:request-theme' }, '*');
-if (window.location.hash.startsWith('#wcp-theme=')) {
-  try {
-    const _p = JSON.parse(atob(window.location.hash.slice(11)));
-    applyTheme(_p.vars || _p);
-  } catch {}
-}
+// URL-based theme — query string (?com.doc.widgetcontextprotocol=) OR hash (#wcp-theme=)
+(function(){
+  const QK  = 'com.doc.widgetcontextprotocol';
+  const raw = new URLSearchParams(location.search).get(QK)
+           || (location.hash.startsWith('#wcp-theme=') ? location.hash.slice(11) : null);
+  if (!raw) return;
+  try { const p = JSON.parse(atob(raw)); applyTheme(p.vars || p); } catch {}
+})();
 window.addEventListener('message', e => {
   if ((e.data?.type === 'wcp:theme' || e.data?.type === 'wcp:context') && (e.data.vars || e.data.theme))
     applyTheme(e.data.vars || e.data.theme);

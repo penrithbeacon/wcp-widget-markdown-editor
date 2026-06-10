@@ -65,12 +65,18 @@ h1{font-size:18px;color:var(--accent);margin-bottom:6px}
 <script type="module">
 window.parent.postMessage({ type: 'wcp:ready' }, '*');
 window.parent.postMessage({ type: 'wcp:request-theme' }, '*');
-if (window.location.hash.startsWith('#wcp-theme=')) {
+// URL-based theme — query string (?com.doc.widgetcontextprotocol=) OR hash (#wcp-theme=)
+(function(){
+  const QK  = 'com.doc.widgetcontextprotocol';
+  const raw = new URLSearchParams(location.search).get(QK)
+           || (location.hash.startsWith('#wcp-theme=') ? location.hash.slice(11) : null);
+  if (!raw) return;
   try {
-    const _fvars = JSON.parse(atob(window.location.hash.slice(11)));
-    for (const [k, v] of Object.entries(_fvars)) document.documentElement.style.setProperty(k, v);
+    const p = JSON.parse(atob(raw));
+    const vars = p.vars || p;
+    for (const [k, v] of Object.entries(vars)) document.documentElement.style.setProperty(k, v);
   } catch {}
-}
+})();
 window.addEventListener('message', e => {
   if ((e.data?.type === 'wcp:theme' || e.data?.type === 'wcp:context') && (e.data.vars || e.data.theme))
     Object.entries(e.data.vars || e.data.theme).forEach(([k,v]) => document.documentElement.style.setProperty(k,v));

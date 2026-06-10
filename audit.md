@@ -4,10 +4,10 @@
 
 ## Latest Audit
 
-- **Date:** 2026-06-09
-- **Version:** 1.0.0
+- **Date:** 2026-06-10
+- **Version:** 1.1.0
 - **WCP:** 2.1.0
-- **Result:** PASS (one issue found and fixed during this audit run)
+- **Result:** PASS — clean run, no issues found
 
 ## Checklist
 
@@ -15,115 +15,69 @@
 |----------|:------:|:------:|:------:|
 | Container | 9 | 9 | PASS |
 | Discovery endpoints | 14 | 14 | PASS |
-| Standard endpoints | 6 | 6 | PASS |
-| Theme reception | 20 (5 × 4 templates) | 20 | PASS |
-| Manifest consistency | 8 | 8 | PASS |
-| Companion agent | 2 | 2 | PASS |
-| Documentation | 4 | 4 | PASS |
+| Standard endpoints | 10 | 10 | PASS |
+| New 1.1.0 endpoints | 4 | 4 | PASS |
+| Theme reception | 24 (6 × 4 templates) | 24 | PASS |
+| Manifest consistency | 10 | 10 | PASS |
+| Companion agent installer | 2 | 2 | PASS |
+| Security | 1 | 1 | PASS |
+| UI standards | 1 | 1 | PASS |
+| Documentation | 5 | 5 | PASS |
+
+## Verified Endpoints
+
+```
+GET /wcp                          200  type=directory ✓
+GET /widget/wcp                   200  uuid+container fields present ✓
+OPTIONS /wcp                      200  ✓
+GET /widget/                      200  ✓
+GET /widget/explorer/             200  ✓
+GET /widget/index                 200  ✓
+GET /widget/health                200  status=ok, container=wcp-widget-markdown-editor, version=1.1.0 ✓
+GET /widget/icon.svg              200  ✓
+GET /widget/api/guids             200  explorer+settings+about ✓
+GET /widget/settings/             200  ✓
+GET /widget/about/                200  ✓
+GET /widget/logs                  200  wcp_logs schema ✓
+GET /widget/export.wcp            200  ✓
+GET /widget/agent/installer       200  (pkg bundled) ✓
+GET /widget/api/agent/status      200  available field present ✓
+GET /widget/api/themes            200  active+custom fields ✓
+GET /widget/api/publish/status    200  published field present ✓
+GET /                             200  ✓
+```
+
+## Theme Reception (all 4 templates)
+
+All six theme reception elements verified in every template:
+
+| Template | wcp:ready | wcp:request-theme | #wcp-theme= | ?com.doc.wcp | wcp:context | setProperty |
+|----------|:---------:|:-----------------:|:-----------:|:------------:|:-----------:|:-----------:|
+| widget.html | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| settings.html | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| about.html | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| index.html | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+Note: `?com.doc.widgetcontextprotocol=<base64>` is now the primary URL theme form (added in 1.1.0). The `#wcp-theme=` hash form is retained for backward compatibility with dashboard "open in window" links.
 
 ## Notes
 
-### Issue found and fixed during audit
+### No issues found
 
-**Theme reception — missing `#wcp-theme=` hash block (all 4 templates)**
-
-All four HTML templates (`widget.html`, `about.html`, `settings.html`, `index.html`)
-contained the legacy `wcp:theme=` (colon, URL-encoded) hash reading pattern but were
-missing the WCP 2.x standard `#wcp-theme=` (hyphen, base64-encoded) block.
-
-Fixed by adding the standard block to all four templates immediately after the
-`wcp:request-theme` postMessage call:
-
-```javascript
-if (window.location.hash.startsWith('#wcp-theme=')) {
-  try {
-    const _fvars = JSON.parse(atob(window.location.hash.slice(11)));
-    for (const [k, v] of Object.entries(_fvars)) document.documentElement.style.setProperty(k, v);
-  } catch {}
-}
-```
-
-Container rebuilt and re-verified after fix. All 5 theme reception elements now
-present in all 4 templates.
+This was a clean audit pass. All checks passed first time with no fixes required during the run.
 
 ### Companion agent installer
 
-`GET /widget/agent/installer` returns `503` — correct and expected. The companion
-agent (`wcp-agent-markdown-editor`) has not yet been built. The endpoint returns
-503 (not 404) signalling "not yet available" rather than "does not exist". This
-is compliant behaviour per the WCP spec.
+`GET /widget/agent/installer` returns `200` — the current `.pkg` (v1.0.0, built 2026-06-10)
+is bundled in `src/installers/`. This release includes the encoding fix (UTF-8-sig + latin-1
+fallback), new file endpoints (`/files/read`, `/files/write`, `/files/delete`, `/files/rename`),
+and the `Uninstall WCP Markdown Editor Agent.app` uninstaller.
 
-### File API path format
+### Agent live during audit
 
-The file API (`/widget/api/files/*`) uses **relative paths** within the workspace
-root. Absolute paths (e.g. `/workspace`) are correctly rejected with 400 via the
-`safe_path()` path traversal guard. This is correct security behaviour; documentation
-updated to reflect relative-path usage.
-
----
-
-## Dry-Run Beta Release Summary (2026-06-09)
-
-**Stage:** Beta | **Mode:** Dry Run
-
-### Checks that passed ✅
-
-- Container starts cleanly from `docker compose up -d`
-- `GET /wcp` → 200, correct JSON structure
-- `GET /widget/wcp` → 200, all required manifest fields present, 3 components
-- `OPTIONS /wcp` → 200
-- `GET /widget/` → 200 HTML
-- `GET /widget/explorer/` → 200 HTML
-- `GET /widget/index` → 200 HTML
-- `GET /widget/health` → 200, `status: ok`, container name correct
-- `GET /widget/icon.svg` → 200 `image/svg+xml`
-- `GET /widget/api/guids` → 200, all 3 component UUIDs present
-- `GET /widget/settings/` → 200 HTML
-- `GET /widget/about/` → 200 HTML
-- `GET /widget/logs` → 200, WCP logs 1.0 schema, `wcp_logs`, `component`, `schema`, `entries` all present
-- `GET /widget/export.wcp` → 200
-- `GET /widget/agent/installer` → 503 (correct graceful degradation)
-- `GET /widget/api/agent/status` → 200, `{ "available": false }` (correct, no agent running)
-- Theme reception: all 5 elements in all 4 templates (after fix applied)
-- README.md generated in standard template format
-- DOCKER.md generated in standard template format
-- specification.md generated with full endpoint table and component UUIDs
-
-### Issue found and fixed ❌→✅
-
-- `#wcp-theme=` hash reading missing from all 4 templates — **fixed** (see Notes above)
-
-### DRY RUN — commands that would execute in a live beta release
-
-```bash
-# Docker Hub — would execute:
-docker buildx create --use --name wcp-builder
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  -t penrithbeacon/wcp-widget-markdown-editor:1.0.0-beta \
-  -t penrithbeacon/wcp-widget-markdown-editor:beta \
-  --push \
-  /Volumes/dashboard/wcp-widget-markdown-editor/
-
-# Docker Hub description — would execute:
-# PATCH https://hub.docker.com/v2/repositories/penrithbeacon/wcp-widget-markdown-editor/
-# with DOCKER.md content as full_description
-
-# GitHub tag — would execute:
-git tag v1.0.0-beta
-git push origin v1.0.0-beta
-gh release create v1.0.0-beta \
-  --title "v1.0.0-beta" \
-  --prerelease \
-  --notes "Beta release — first public build. WCP 2.1.0 certified." \
-  --repo penrithbeacon/wcp-widget-markdown-editor
-```
-
-### Verdict
-
-> **This release is ready to go live** (pending developer consent for each public push).
-> The one issue found (`#wcp-theme=` hash reading) was identified and fixed during this
-> dry run. Container is rebuilt and re-verified. All checks now pass.
+The companion agent was running during this audit (`GET /widget/api/agent/status` returned
+`available: true`). File browsing and read/write operations verified against a live agent
+instance.
 
 ---
 
@@ -131,4 +85,5 @@ gh release create v1.0.0-beta \
 
 | Date | Version | WCP | Result |
 |------|---------|-----|--------|
-| 2026-06-09 | 1.0.0 | 2.1.0 | PASS (1 issue found and fixed) |
+| 2026-06-10 | 1.1.0 | 2.1.0 | PASS — clean, no issues |
+| 2026-06-09 | 1.0.0 | 2.1.0 | PASS (1 issue found and fixed during audit) |

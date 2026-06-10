@@ -1,10 +1,10 @@
 # WCP Widget: Markdown Editor
 
-WYSIWYG markdown file editor with folder browser, multi-instance configuration, Publish to Web, and optional companion host agent for native filesystem access.
+WYSIWYG markdown file editor with folder browser, multi-instance configuration, Publish to Web, and companion host agent for native filesystem access.
 
 **Specification:** [widgetcontextprotocol.com](https://widgetcontextprotocol.com) | **Part of the** [Penrith Beacon WCP](https://penrithbeacon.com) widget suite.
 
-> **WCP 2.1.0 certified.** Full theme reception, orchestration-aware state, Publish to Web, WCP export.
+> **WCP 2.1.0 certified.** Full theme reception (both URL forms), orchestration-aware state, Publish to Web (WCP-compliant SPA), WCP export.
 
 ---
 
@@ -13,8 +13,8 @@ WYSIWYG markdown file editor with folder browser, multi-instance configuration, 
 | Component | Default size | Description |
 |-----------|:------------:|-------------|
 | Markdown Explorer | 12×12 | Main widget — WYSIWYG editor with resizable file tree sidebar |
-| Settings | 12×12 | Configure root folder path, theme, and companion agent |
-| About | 12×12 | OCI image reference, version, publisher |
+| Settings | 12×12 | Configure root folder, theme (built-ins + WCPT import), companion agent status |
+| About | 12×12 | OCI image reference, version, publisher, agent installer download |
 
 ---
 
@@ -23,10 +23,11 @@ WYSIWYG markdown file editor with folder browser, multi-instance configuration, 
 ```bash
 docker run -d \
   --name wcp-widget-markdown-editor \
-  -p 3748:3748 \
+  -p 127.0.0.1:3748:3748 \
   -v markdown_workspace:/workspace \
   -e CONTAINER_NAME=wcp-widget-markdown-editor \
   -e WIDGET_PORT=3748 \
+  --add-host host.docker.internal:host-gateway \
   --restart unless-stopped \
   docker.io/penrithbeacon/wcp-widget-markdown-editor:latest
 ```
@@ -41,7 +42,7 @@ services:
     image: docker.io/penrithbeacon/wcp-widget-markdown-editor:latest
     container_name: wcp-widget-markdown-editor
     ports:
-      - "3748:3748"
+      - "127.0.0.1:3748:3748"
     volumes:
       - markdown_workspace:/workspace
     environment:
@@ -63,18 +64,18 @@ volumes:
 
 ### Without companion agent
 
-The widget works immediately after starting. Files are stored in the `markdown_workspace`
-Docker volume at `/workspace`. Use the Settings component to set the active root folder.
+The widget UI loads, but file browsing requires the companion agent. Configure the agent first for full functionality.
 
 ### With companion agent
 
-The `wcp-agent-markdown-editor` companion agent adds host filesystem access — browse your
-local drives from within the widget.
+The `wcp-agent-markdown-editor` companion agent provides host filesystem access — browse your local drives from within the widget.
 
-1. Download the macOS installer from the **About** component (`GET /widget/agent/installer`)
-   or from [GitHub Releases](https://github.com/penrithbeacon/wcp-agent-markdown-editor/releases)
+1. Download the macOS installer from the **About** component (`GET /widget/agent/installer`) or from [GitHub Releases](https://github.com/penrithbeacon/wcp-agent-markdown-editor/releases)
 2. Run the `.pkg` installer — the agent starts automatically at login on `127.0.0.1:3749`
 3. The widget detects the agent automatically via `host.docker.internal:3749`
+4. Open Settings → set the Root Folder using the Browse picker (shows your host filesystem)
+
+The installer includes `Uninstall WCP Markdown Editor Agent.app` in `/Applications/` for clean removal.
 
 ---
 
@@ -86,8 +87,8 @@ local drives from within the widget.
 | `Wcp-Dashboard-Id` | Yes | Dashboard installation identifier |
 | `Wcp-Version` | Yes | WCP protocol version of the requesting dashboard |
 | `Wcp-Widget-Id` | Yes | Widget identifier within the dashboard |
-| `Wcp-Orchestration-Id` | No | Active orchestration identifier (for state scoping) |
-| `Wcp-Application-Id` | No | Active application identifier (for state scoping) |
+| `Wcp-Orchestration-Id` | No | Active orchestration identifier |
+| `Wcp-Application-Id` | No | Active application identifier |
 
 ---
 
@@ -97,48 +98,34 @@ local drives from within the widget.
 |----------|-------------|
 | `GET /wcp` | Container Directory — WCP two-tier discovery |
 | `GET /widget/wcp` | Widget Manifest with runtime publish status |
-| `OPTIONS /wcp` | CORS preflight (all widget routes) |
-| `GET /widget/` | Compact dashboard view — Markdown Explorer |
-| `GET /widget/explorer/` | Alias for `GET /widget/` |
-| `GET /widget/index` | Widget Index — lists all controls |
-| `GET /widget/health` | Health check with container name and version |
-| `GET /widget/icon.svg` | Widget icon (SVG) |
-| `GET /widget/api/guids` | Component UUIDs for orchestration binding |
+| `GET /widget/` | Markdown Explorer component |
 | `GET /widget/settings/` | Settings component |
 | `GET /widget/about/` | About component |
-| `GET /widget/logs` | WCP logs protocol — structured log envelope |
-| `POST /widget/configure` | Save per-instance configuration |
-| `GET /widget/api/files/list` | List files and directories at a path |
-| `GET /widget/api/files/read` | Read a file's content |
-| `POST /widget/api/files/save` | Write content to a file |
-| `POST /widget/api/files/mkdir` | Create a new directory |
-| `POST /widget/api/files/rename` | Rename a file or directory |
-| `POST /widget/api/files/delete` | Delete a file or directory |
-| `POST /widget/publish` | Publish current document as a standalone SPA |
+| `GET /widget/index` | Widget Index |
+| `GET /widget/health` | Health check |
+| `GET /widget/icon.svg` | Widget icon |
+| `GET /widget/api/guids` | Component UUIDs |
+| `GET /widget/logs` | WCP logs protocol |
+| `POST /widget/configure` | Save per-instance config: `{ root, theme }` |
+| `GET /widget/api/root/validate` | Validate root path + agent reachability |
+| `GET /widget/api/files/list` | List files/dirs via agent |
+| `GET /widget/api/files/read` | Read file via agent |
+| `POST /widget/api/files/save` | Write file via agent |
+| `POST /widget/api/files/mkdir` | Create directory via agent |
+| `POST /widget/api/files/rename` | Rename via agent |
+| `POST /widget/api/files/delete` | Delete via agent |
+| `GET /widget/api/agent/status` | Agent reachability check |
+| `GET /widget/api/agent/browse` | Proxy: agent directory listing |
+| `GET /widget/api/agent/drives` | Proxy: agent volumes/drives |
+| `GET /widget/api/themes` | Active theme + custom theme list |
+| `POST /widget/api/themes/import` | Import themes from `.wcpt` |
+| `DELETE /widget/api/themes/<id>` | Delete a custom theme |
+| `POST /widget/publish` | Publish document as WCP-compliant SPA |
 | `DELETE /widget/publish` | Remove published SPA |
-| `GET /widget/export.wcp` | Download widget as `.wcp` package |
-| `GET /widget/agent/installer` | Companion agent installer (`.pkg`); `503` if not yet bundled |
-| `GET /widget/api/agent/status` | Check whether companion agent is reachable |
-
----
-
-## API
-
-**Check agent status:**
-```bash
-curl -s http://localhost:3748/widget/api/agent/status
-# { "available": true } or { "available": false }
-```
-
-**List files:**
-```bash
-curl -s "http://localhost:3748/widget/api/files/list?path=/workspace"
-```
-
-**Read logs:**
-```bash
-curl -s http://localhost:3748/widget/logs | python3 -m json.tool
-```
+| `GET /widget/api/publish/status` | Published SPA state + metadata |
+| `GET /widget/export.wcp` | Download as `.wcp` package |
+| `GET /widget/agent/installer` | Companion agent `.pkg` installer |
+| `GET /` | Serves published SPA |
 
 ---
 
@@ -147,7 +134,7 @@ curl -s http://localhost:3748/widget/logs | python3 -m json.tool
 | Property | Value |
 |----------|-------|
 | WCP Version | 2.1.0 |
-| Widget Version | 1.0.0 |
+| Widget Version | 1.1.0 |
 | Render mode | iframe |
 | Auth | None |
 | Default card size | 12×12 |
@@ -163,7 +150,6 @@ curl -s http://localhost:3748/widget/logs | python3 -m json.tool
 | Platforms | `linux/amd64`, `linux/arm64` |
 | Port | 3748 |
 | Framework | Flask 3.0.3 + Flask-CORS 4.0.1 |
-| Dependencies | Flask, Flask-CORS, Werkzeug |
 | Persistent storage | `markdown_workspace` volume at `/workspace` |
 
 ---
@@ -173,8 +159,28 @@ curl -s http://localhost:3748/widget/logs | python3 -m json.tool
 | Tag | Description |
 |-----|-------------|
 | `latest` | Most recent stable release |
-| `1.0.0` | Initial release — full WCP 2.1.0 compliance, WYSIWYG editor, companion agent support |
-| `1.0.0-beta` | Beta release — first public build |
+| `1.1.0-wcp2.1.0` | Theme card, WCP URL compliance, WCP-compliant SPA, GFM tables, agent-only model |
+| `1.0.0-wcp2.1.0` | Initial release |
+
+---
+
+## Changelog
+
+### 1.1.0 (2026-06-10)
+- **Theme card** — Settings page now shows 3 Penrith Beacon WCP built-in themes (Dark / Light / High Contrast) with "Built-in" badge; custom theme import from `.wcpt` files via checkbox modal with Select All / Deselect All
+- **Full-dashboard theme broadcast** — selecting a theme in Settings posts `wcp:theme-apply` to `window.top`, updating the entire dashboard (podium, stave tabs, all widgets)
+- **WCP URL theme compliance** — all four HTML templates now support both `?com.doc.widgetcontextprotocol=<base64>` (query string) and `#wcp-theme=<base64>` (hash) forms
+- **WCP-compliant published SPA** — `POST /widget/publish` generates HTML with baked-in active theme CSS vars and inline URL reception snippet; full `var(--wcp-color-*)` typography
+- **GFM table round-trip** — TipTap Table/TableRow/TableHeader/TableCell extensions added; Turndown GFM plugin preserves pipe table format on save
+- **Encoding fix** — agent file reads use `utf-8-sig` with `latin-1` fallback, eliminating `�` replacement characters in files with non-ASCII content
+- **Agent-only file model** — all file operations proxy through the companion agent; Docker volume stores widget state only
+- **Uninstaller app** — `Uninstall WCP Markdown Editor Agent.app` bundled in agent `.pkg` for clean one-click removal
+- **Published page card** — Settings page shows current publish state, source `.md` path, published timestamp, View and Unpublish actions
+- **Unpublish button** — toolbar Unpublish button removes the published SPA; settings card updates immediately
+- **Manifest fixes** — `/wcp` now includes `type: "directory"`; `/widget/wcp` now includes `uuid` and `container` fields
+
+### 1.0.0 (2026-06-09)
+- Initial release — full WCP 2.1.0 compliance, WYSIWYG editor, companion agent support, Publish to Web, WCP export
 
 ---
 

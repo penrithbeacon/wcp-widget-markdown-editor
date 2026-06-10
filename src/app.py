@@ -13,7 +13,8 @@ CORS(app)
 
 PORT          = int(os.environ.get('WIDGET_PORT', 3748))
 CONTAINER     = os.environ.get('CONTAINER_NAME', 'wcp-widget-markdown-editor')
-VERSION       = '1.0.0'
+VERSION       = '1.1.0'
+WIDGET_UUID   = '54e49aec-61ea-4b6e-b24f-b79432366872'
 WORKSPACE     = '/workspace'          # Docker volume — state only (config, guids, published)
 AGENT_PORT    = int(os.environ.get('AGENT_PORT', 3749))
 AGENT_BASE    = f'http://host.docker.internal:{AGENT_PORT}'
@@ -136,13 +137,15 @@ def agent_available():
 @app.route('/wcp')
 def container_directory():
     return jsonify({
-        'wcp':         '2.1.0',
-        'container':   CONTAINER,
-        'version':     VERSION,
+        'type':      'directory',
+        'wcp':       '2.1.0',
         'widgets': [{
-            'id':   'wcp-widget-markdown-editor',
-            'name': 'Markdown Editor',
-            'wcp':  f'http://localhost:{PORT}/widget/wcp'
+            'id':          'wcp-widget-markdown-editor',
+            'uuid':        WIDGET_UUID,
+            'name':        'Markdown Editor',
+            'description': 'WYSIWYG markdown file editor with folder browser and companion host agent.',
+            'icon':        f'http://localhost:{PORT}/widget/icon.svg',
+            'manifest':    f'http://localhost:{PORT}/widget/wcp',
         }]
     })
 
@@ -152,12 +155,20 @@ def widget_manifest():
     published = os.path.exists(os.path.join(PUBLISHED_DIR, 'index.html'))
     return jsonify({
         'wcp':         '2.1.0',
+        'uuid':        WIDGET_UUID,
         'id':          'wcp-widget-markdown-editor',
         'name':        'Markdown Editor',
         'version':     VERSION,
         'description': 'WYSIWYG markdown file editor with folder browser and companion host agent.',
         'publisher':   'penrithbeacon',
         'icon':        f'http://localhost:{PORT}/widget/icon.svg',
+        'container': {
+            'defaultLifecycle': 'always',
+            'image':            'docker.io/penrithbeacon/wcp-widget-markdown-editor',
+            'port':             PORT,
+            'source':           {'type': 'registry'},
+            'tag':              f'{VERSION}-wcp2.1.0',
+        },
         'components': [
             {
                 'id':          guids['explorer'],
