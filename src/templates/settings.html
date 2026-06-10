@@ -268,9 +268,14 @@ function applyTheme(t) {
 }
 window.parent.postMessage({ type: 'wcp:ready' }, '*');
 window.parent.postMessage({ type: 'wcp:request-theme' }, '*');
-if (window.location.hash.startsWith('#wcp-theme=')) {
-  try { const _p = JSON.parse(atob(window.location.hash.slice(11))); applyTheme(_p.vars || _p); } catch {}
-}
+// URL-based theme — query string (?com.doc.widgetcontextprotocol=) OR hash (#wcp-theme=)
+(function(){
+  const QK  = 'com.doc.widgetcontextprotocol';
+  const raw = new URLSearchParams(location.search).get(QK)
+           || (location.hash.startsWith('#wcp-theme=') ? location.hash.slice(11) : null);
+  if (!raw) return;
+  try { const p = JSON.parse(atob(raw)); applyTheme(p.vars || p); } catch {}
+})();
 window.addEventListener('message', e => {
   if ((e.data?.type === 'wcp:theme' || e.data?.type === 'wcp:context') && (e.data.vars || e.data.theme))
     applyTheme(e.data.vars || e.data.theme);
@@ -538,7 +543,14 @@ loadThemes();
 window.selectTheme = async function(id) {
   _activeThemeId = id;
   const t = getAllThemes().find(x => x.id === id || x.uuid === id);
-  if (t) applyTheme(t.vars);
+  if (t) {
+    applyTheme(t.vars);
+    // Broadcast to host dashboard (podium + stave tabs + all widgets)
+    // Use window.top so this works regardless of iframe nesting depth
+    if (window.top !== window) {
+      window.top.postMessage({ type: 'wcp:theme-apply', vars: t.vars }, '*');
+    }
+  }
   renderThemeList();
   await fetch('/widget/configure', {
     method:'POST', headers:{'Content-Type':'application/json','Wcp-Instance-Id':INSTANCE_ID},

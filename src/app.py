@@ -22,6 +22,41 @@ CONFIG_FILE   = os.path.join(WORKSPACE, '.widget-config.json')
 GUID_FILE     = os.path.join(WORKSPACE, '.widget-guids.json')
 PUBLISHED_DIR = os.path.join(WORKSPACE, '.published')
 
+# Penrith Beacon built-in WCP theme vars — mirrors BUILTIN_THEMES in the dashboard client
+BUILTIN_THEME_VARS = {
+    'dark': {
+        '--wcp-color-bg':'#0d1117','--wcp-color-surface':'#161b22','--wcp-color-surface-raised':'#1c2128',
+        '--wcp-color-border':'#30363d','--wcp-color-text':'#e6edf3','--wcp-color-text-muted':'#8b949e',
+        '--wcp-color-primary':'#f0883e','--wcp-color-success':'#3fb950','--wcp-color-danger':'#f85149',
+        '--wcp-color-warning':'#d29922','--wcp-color-info':'#58a6ff',
+        '--wcp-radius-md':'8px','--wcp-shadow-sm':'0 4px 16px rgba(0,0,0,.45)',
+    },
+    'light': {
+        '--wcp-color-bg':'#ffffff','--wcp-color-surface':'#f6f8fa','--wcp-color-surface-raised':'#eaeef2',
+        '--wcp-color-border':'#d0d7de','--wcp-color-text':'#1f2328','--wcp-color-text-muted':'#636c76',
+        '--wcp-color-primary':'#f0883e','--wcp-color-success':'#1a7f37','--wcp-color-danger':'#cf222e',
+        '--wcp-color-warning':'#9a6700','--wcp-color-info':'#0969da',
+        '--wcp-radius-md':'8px','--wcp-shadow-sm':'0 4px 8px rgba(0,0,0,.12)',
+    },
+    'hc': {
+        '--wcp-color-bg':'#000000','--wcp-color-surface':'#0d0d0d','--wcp-color-surface-raised':'#1a1a1a',
+        '--wcp-color-border':'#ffffff','--wcp-color-text':'#ffffff','--wcp-color-text-muted':'#cccccc',
+        '--wcp-color-primary':'#ff8c00','--wcp-color-success':'#00ff41','--wcp-color-danger':'#ff3333',
+        '--wcp-color-warning':'#ffff00','--wcp-color-info':'#00b4ff',
+        '--wcp-radius-md':'4px','--wcp-shadow-sm':'none',
+    },
+}
+
+def resolve_theme_vars(instance_id):
+    """Return the active theme's CSS vars dict for the given instance."""
+    cfg      = get_instance_config(instance_id)
+    active   = _LEGACY_THEME_MAP.get(cfg.get('theme', 'dark'), cfg.get('theme', 'dark'))
+    if active in BUILTIN_THEME_VARS:
+        return BUILTIN_THEME_VARS[active]
+    custom = next((t for t in cfg.get('custom_themes', [])
+                   if (t.get('id') or t.get('uuid')) == active), None)
+    return custom.get('vars', BUILTIN_THEME_VARS['dark']) if custom else BUILTIN_THEME_VARS['dark']
+
 # ── State helpers (volume — config, guids, published only) ───────────────────
 
 def ensure_workspace():
@@ -421,13 +456,57 @@ def publish():
     content     = data.get('html', '<p>No content provided.</p>')
     title       = data.get('title', 'Published Document')
     source_path = data.get('source_path', '')
+    iid         = instance_id_from_request()
+    theme_vars  = resolve_theme_vars(iid)
+
+    # Build baked-in :root block from active theme (URL params override at runtime)
+    root_css = ':root{' + ''.join(f'{k}:{v};' for k, v in theme_vars.items()) + '}'
+
+    # WCP theme URL reception snippet — supports both
+    #   ?com.doc.widgetcontextprotocol=<base64>  (query string form)
+    #   #wcp-theme=<base64>                      (hash fragment form)
+    wcp_snippet = """\
+<script>(function(){
+  var QK='com.doc.widgetcontextprotocol';
+  var raw=new URLSearchParams(location.search).get(QK)
+      ||(location.hash.startsWith('#wcp-theme=')?location.hash.slice(11):null);
+  if(!raw)return;
+  try{var p=JSON.parse(atob(raw)),vars=p.vars||p;
+    for(var k in vars)document.documentElement.style.setProperty(k,vars[k]);}
+  catch(e){}
+})();</script>"""
+
     os.makedirs(PUBLISHED_DIR, exist_ok=True)
     html = f'''<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="UTF-8"><title>{title}</title>
-<style>body{{max-width:800px;margin:2rem auto;font-family:Georgia,serif;line-height:1.7;padding:0 1rem}}</style>
-</head><body>{content}</body></html>'''
-    with open(os.path.join(PUBLISHED_DIR, 'index.html'), 'w') as f:
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title}</title>
+<style>
+{root_css}
+*,*::before,*::after{{box-sizing:border-box}}
+body{{background:var(--wcp-color-bg,#0d1117);color:var(--wcp-color-text,#e6edf3);font-family:system-ui,-apple-system,sans-serif;line-height:1.7;max-width:800px;margin:2rem auto;padding:0 1.5rem}}
+h1,h2,h3,h4,h5,h6{{color:var(--wcp-color-text,#e6edf3);line-height:1.3;margin:1.5em 0 .5em}}
+h1{{font-size:2em;border-bottom:1px solid var(--wcp-color-border,#30363d);padding-bottom:.3em}}
+h2{{font-size:1.5em;border-bottom:1px solid var(--wcp-color-border,#30363d);padding-bottom:.2em}}
+a{{color:var(--wcp-color-primary,#f0883e)}}
+p{{margin:.75em 0}}
+code{{background:var(--wcp-color-surface,#161b22);border:1px solid var(--wcp-color-border,#30363d);border-radius:4px;padding:2px 6px;font-family:ui-monospace,monospace;font-size:.9em}}
+pre{{background:var(--wcp-color-surface,#161b22);border:1px solid var(--wcp-color-border,#30363d);border-radius:6px;padding:1rem;overflow-x:auto;margin:1em 0}}
+pre code{{background:none;border:none;padding:0}}
+blockquote{{border-left:3px solid var(--wcp-color-primary,#f0883e);margin:1em 0;padding:.5em 1em;color:var(--wcp-color-text-muted,#8b949e);background:var(--wcp-color-surface,#161b22);border-radius:0 4px 4px 0}}
+table{{border-collapse:collapse;width:100%;margin:1em 0}}
+th,td{{border:1px solid var(--wcp-color-border,#30363d);padding:8px 12px;text-align:left}}
+th{{background:var(--wcp-color-surface,#161b22);font-weight:600}}
+img{{max-width:100%;border-radius:4px}}
+hr{{border:none;border-top:1px solid var(--wcp-color-border,#30363d);margin:2em 0}}
+</style>
+{wcp_snippet}
+</head>
+<body>{content}</body>
+</html>'''
+    with open(os.path.join(PUBLISHED_DIR, 'index.html'), 'w', encoding='utf-8') as f:
         f.write(html)
     # Save metadata so settings page can show what's published
     meta = {
