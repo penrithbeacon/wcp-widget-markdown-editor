@@ -308,9 +308,12 @@ def themes_delete(theme_id):
     iid = instance_id_from_request()
     cfg = get_instance_config(iid)
     before = len(cfg.get('custom_themes', []))
+    # Match on EITHER uuid or id — themes have both fields and the client may send either.
+    # Old code used (uuid or id) which silently skipped deletion when uuid != sent id.
     cfg['custom_themes'] = [t for t in cfg.get('custom_themes', [])
-                            if (t.get('uuid') or t.get('id')) != theme_id]
-    if cfg.get('theme') == theme_id:
+                            if t.get('uuid') != theme_id and t.get('id') != theme_id]
+    # Also clear active theme if it was stored under either key
+    if cfg.get('theme') in (theme_id,):
         cfg['theme'] = 'dark'
     save_instance_config(iid, cfg)
     return jsonify({'status': 'ok', 'removed': before - len(cfg['custom_themes'])})
@@ -344,7 +347,7 @@ def list_files():
     # Build the absolute path to pass to the agent
     abs_path = root if not rel else os.path.join(root, rel.lstrip('/'))
     try:
-        data, _ = agent_get('/files/browse', {'path': abs_path})
+        data, _ = agent_get('/files/browse', {'path': abs_path}, timeout=30)
     except urllib.error.HTTPError as e:
         return jsonify({'error': f'agent error {e.code}'}), 502
     except Exception:
@@ -607,7 +610,7 @@ def agent_browse():
         # Ask the agent to resolve it by passing the literal path — agent calls expanduser
         pass
     try:
-        data, _ = agent_get('/files/browse', {'path': path})
+        data, _ = agent_get('/files/browse', {'path': path}, timeout=30)
         return jsonify(data)
     except urllib.error.HTTPError as e:
         return jsonify({'error': f'agent error {e.code}'}), 502

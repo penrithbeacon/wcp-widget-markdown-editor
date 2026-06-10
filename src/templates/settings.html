@@ -37,6 +37,12 @@ h1{font-size:18px;color:var(--accent);margin-bottom:20px}
 /* ── Import overlay ──────────────────────────────────────────────────────────── */
 #import-overlay{display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.6);align-items:center;justify-content:center}
 #import-overlay.open{display:flex}
+/* ── Delete confirm overlay ─────────────────────────────────────────────────── */
+#delete-confirm-overlay{display:none;position:fixed;inset:0;z-index:700;background:rgba(0,0,0,.6);align-items:center;justify-content:center}
+#delete-confirm-overlay.open{display:flex}
+#delete-confirm-modal{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;width:320px;display:flex;flex-direction:column;gap:14px}
+#delete-confirm-modal p{font-size:13px;margin:0;line-height:1.5}
+#delete-confirm-modal .btn-row{display:flex;gap:8px;justify-content:flex-end}
 #import-modal{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;width:440px;max-height:80vh;display:flex;flex-direction:column;gap:12px}
 #import-modal h3{font-size:15px;margin-bottom:2px}
 #import-modal .sub{font-size:12px;color:var(--muted)}
@@ -65,8 +71,10 @@ h1{font-size:18px;color:var(--accent);margin-bottom:20px}
   padding:10px 16px;background:var(--surface);
   border-bottom:1px solid var(--border);flex-shrink:0
 }
-#picker-header h3{font-size:14px;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
-#picker-path{font-size:12px;color:var(--muted);font-weight:normal}
+#picker-header h3{font-size:14px;flex-shrink:0;margin:0}
+#picker-path{flex:1;font-size:12px;color:var(--muted);font-weight:normal;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
+#picker-up-btn{flex-shrink:0;padding:3px 10px;font-size:12px}
+#picker-up-btn:disabled{opacity:.35;cursor:not-allowed}
 #picker-body{display:flex;flex:1;overflow:hidden}
 #picker-sidebar{
   width:180px;flex-shrink:0;background:var(--surface);
@@ -202,8 +210,10 @@ h1{font-size:18px;color:var(--accent);margin-bottom:20px}
 <!-- Full-screen folder picker -->
 <div id="picker">
   <div id="picker-header">
-    <h3>Choose Root Folder <span id="picker-path"></span></h3>
-    <button class="btn" style="flex-shrink:0;margin-left:8px" onclick="closePicker()">✕ Cancel</button>
+    <h3>Choose Root Folder</h3>
+    <button id="picker-up-btn" class="btn" onclick="pickerUp()" disabled title="Go up one level">↑ Up</button>
+    <span id="picker-path"></span>
+    <button class="btn" style="flex-shrink:0" onclick="closePicker()">✕ Cancel</button>
   </div>
   <div id="picker-body">
     <div id="picker-sidebar">
@@ -224,6 +234,17 @@ h1{font-size:18px;color:var(--accent);margin-bottom:20px}
     <span id="picker-select-label">Browse to a folder and click Select.</span>
     <button class="btn primary" onclick="pickerSelect()">✓ Select This Folder</button>
     <button class="btn" onclick="closePicker()">Cancel</button>
+  </div>
+</div>
+
+<!-- Delete confirmation overlay -->
+<div id="delete-confirm-overlay">
+  <div id="delete-confirm-modal">
+    <p id="delete-confirm-msg"></p>
+    <div class="btn-row">
+      <button class="btn" id="delete-confirm-cancel">Cancel</button>
+      <button class="btn" id="delete-confirm-ok" style="color:var(--red,#f38ba8);border-color:rgba(243,139,168,.35)">Delete</button>
+    </div>
   </div>
 </div>
 
@@ -285,6 +306,7 @@ const INSTANCE_ID  = '{{ instance_id }}';
 const PORT         = {{ port }};
 let   currentTheme = '{{ theme }}';
 let   pickerCurrentPath = '';
+let   _pickerHistory    = [];  // navigation history for ↑ Up button
 
 // ── Picker splitter ───────────────────────────────────────────────────────────
 const PICKER_KEY = 'md-settings:picker-sidebar-width';
@@ -380,6 +402,9 @@ checkAgent();
 
 // ── Full-screen picker ────────────────────────────────────────────────────────
 window.openPicker = async function() {
+  _pickerHistory    = [];   // reset back-navigation history each time picker opens
+  pickerCurrentPath = '';
+  _pickerSyncUpBtn();
   document.getElementById('picker').classList.add('open');
   // Populate favourites
   const favs = [
@@ -395,9 +420,11 @@ window.openPicker = async function() {
     el.className = 'picker-loc';
     el.innerHTML = `<span class="ploc-icon">${f.icon}</span><span class="ploc-name">${f.name}</span>`;
     el.addEventListener('click', () => {
+      // Sidebar jump = new top-level; reset history so Back is disabled
+      _pickerHistory = [];
       document.querySelectorAll('.picker-loc').forEach(x => x.classList.remove('active'));
       el.classList.add('active');
-      pickerBrowse(f.path);
+      pickerBrowse(f.path, false);
     });
     favsEl.appendChild(el);
   });
@@ -414,9 +441,11 @@ window.openPicker = async function() {
       const icon = loc.type === 'home' ? '🏠' : '💾';
       el.innerHTML = `<span class="ploc-icon">${icon}</span><span class="ploc-name" title="${loc.path}">${loc.name}</span>`;
       el.addEventListener('click', () => {
+        // Sidebar jump = new top-level; reset history so Back is disabled
+        _pickerHistory = [];
         document.querySelectorAll('.picker-loc').forEach(x => x.classList.remove('active'));
         el.classList.add('active');
-        pickerBrowse(loc.path);
+        pickerBrowse(loc.path, false);
       });
       locsEl.appendChild(el);
     });
@@ -425,17 +454,33 @@ window.openPicker = async function() {
   }
   // Start at current root or home
   const current = document.getElementById('root-input').value.trim();
-  pickerBrowse(current || '~');
+  pickerBrowse(current || '~', false);  // initial load — no history to push
 };
 
 window.closePicker = function() {
   document.getElementById('picker').classList.remove('open');
 };
 
-async function pickerBrowse(path) {
+window.pickerUp = function() {
+  if (!_pickerHistory.length) return;
+  const prev = _pickerHistory.pop();
+  pickerBrowse(prev, false);  // false = don't push current, we're going back
+};
+
+function _pickerSyncUpBtn() {
+  const btn = document.getElementById('picker-up-btn');
+  if (btn) btn.disabled = _pickerHistory.length === 0;
+}
+
+// pickerBrowse(path, pushCurrent=true)
+// Set pushCurrent=false when navigating back (history pop) or on top-level sidebar jump
+// so we don't add the current location to history again.
+async function pickerBrowse(path, pushCurrent = true) {
+  if (pushCurrent && pickerCurrentPath) _pickerHistory.push(pickerCurrentPath);
   pickerCurrentPath = path;
   document.getElementById('picker-path').textContent = path;
   document.getElementById('picker-select-label').textContent = `Select: ${path}`;
+  _pickerSyncUpBtn();
 
   const listEl  = document.getElementById('picker-list');
   const emptyEl = document.getElementById('picker-empty');
@@ -447,7 +492,11 @@ async function pickerBrowse(path) {
     const r  = await fetch('/widget/api/agent/browse?path=' + encodeURIComponent(path));
     const dj = await r.json();
     const dirs = (dj.entries || [])
-      .filter(e => e.type === 'dir' && !e.name.startsWith('.') && !e.name.startsWith('#'))
+      .filter(e => e.type === 'dir'
+        && !e.name.startsWith('.') && !e.name.startsWith('#')
+        // Exclude macOS app/framework/plugin bundles — dirs on disk but not user folders
+        && !e.name.endsWith('.app') && !e.name.endsWith('.framework')
+        && !e.name.endsWith('.bundle') && !e.name.endsWith('.plugin'))
       .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
     if (!dirs.length) { emptyEl.classList.add('visible'); return; }
     dirs.forEach(e => {
@@ -516,7 +565,7 @@ function renderThemeList() {
   const list = document.getElementById('theme-list');
   list.innerHTML = getAllThemes().map(t => {
     const active  = t.id === _activeThemeId || (t.uuid && t.uuid === _activeThemeId);
-    const tid     = t.id || t.uuid;
+    const tid     = t.uuid || t.id;  // uuid-first: matches server's (uuid or id) priority
     const actions = t.builtin ? '' :
       `<button class="btn" style="font-size:11px;padding:3px 9px;color:var(--red);border-color:rgba(243,139,168,.35)"
          onclick="event.stopPropagation();deleteTheme('${esc(tid)}')">Delete</button>`;
@@ -538,6 +587,11 @@ async function loadThemes() {
   } catch {}
   renderThemeList();
 }
+// Re-sync themes whenever the settings tab becomes visible again.
+// Without this, stale _customThemes stay in DOM when the dashboard preserves the iframe.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') loadThemes();
+});
 loadThemes();
 
 window.selectTheme = async function(id) {
@@ -562,16 +616,39 @@ window.selectTheme = async function(id) {
 window.deleteTheme = async function(id) {
   const t = _customThemes.find(x => x.id===id || x.uuid===id);
   if (!t) return;
-  if (!confirm(`Delete theme "${t.name}"?`)) return;
-  await fetch(`/widget/api/themes/${encodeURIComponent(id)}`, {
+  // window.confirm() is blocked in cross-origin iframes (Chromium/Electron security).
+  // Use a custom Promise-based modal instead.
+  const confirmed = await new Promise(resolve => {
+    const overlay    = document.getElementById('delete-confirm-overlay');
+    const msg        = document.getElementById('delete-confirm-msg');
+    const okBtn      = document.getElementById('delete-confirm-ok');
+    const cancelBtn  = document.getElementById('delete-confirm-cancel');
+    msg.textContent  = `Delete theme "${t.name}"?`;
+    overlay.classList.add('open');
+    function cleanup() {
+      overlay.classList.remove('open');
+      okBtn.removeEventListener('click', onOk);
+      cancelBtn.removeEventListener('click', onCancel);
+    }
+    function onOk()     { cleanup(); resolve(true);  }
+    function onCancel() { cleanup(); resolve(false); }
+    okBtn.addEventListener('click', onOk);
+    cancelBtn.addEventListener('click', onCancel);
+  });
+  if (!confirmed) return;
+  const resp = await fetch(`/widget/api/themes/${encodeURIComponent(id)}`, {
     method:'DELETE', headers:{'Wcp-Instance-Id':INSTANCE_ID}
   });
-  _customThemes = _customThemes.filter(x => x.id!==id && x.uuid!==id);
-  if (_activeThemeId === id) {
-    _activeThemeId = 'dark';
-    applyTheme(BUILTIN_THEMES[0].vars);
+  if (!resp.ok) { toast('Failed to delete theme.'); return; }
+  // Re-sync authoritative state from server (fixes wrong radio button + reappearing themes)
+  await loadThemes();
+  // Apply whatever theme the server now considers active (in case deleted theme was active)
+  const nowActive = getAllThemes().find(t => t.id === _activeThemeId || t.uuid === _activeThemeId);
+  if (nowActive) {
+    applyTheme(nowActive.vars);
+    if (window.top !== window)
+      window.top.postMessage({ type: 'wcp:theme-apply', vars: nowActive.vars }, '*');
   }
-  renderThemeList();
   toast('Theme deleted.');
 };
 

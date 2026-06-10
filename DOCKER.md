@@ -112,7 +112,7 @@ The installer includes `Uninstall WCP Markdown Editor Agent.app` in `/Applicatio
 | `GET /widget/api/files/read` | Read file via agent |
 | `POST /widget/api/files/save` | Write file via agent |
 | `POST /widget/api/files/mkdir` | Create directory via agent |
-| `POST /widget/api/files/rename` | Rename via agent |
+| `POST /widget/api/files/rename` | Rename via agent: `{ old, new }` |
 | `POST /widget/api/files/delete` | Delete via agent |
 | `GET /widget/api/agent/status` | Agent reachability check |
 | `GET /widget/api/agent/browse` | Proxy: agent directory listing |
@@ -166,7 +166,7 @@ The installer includes `Uninstall WCP Markdown Editor Agent.app` in `/Applicatio
 
 ## Changelog
 
-### 1.1.0 (2026-06-10)
+### 1.1.0 (2026-06-10) — *includes companion agent v1.0.2 installer*
 - **Theme card** — Settings page now shows 3 Penrith Beacon WCP built-in themes (Dark / Light / High Contrast) with "Built-in" badge; custom theme import from `.wcpt` files via checkbox modal with Select All / Deselect All
 - **Full-dashboard theme broadcast** — selecting a theme in Settings posts `wcp:theme-apply` to `window.top`, updating the entire dashboard (podium, stave tabs, all widgets)
 - **WCP URL theme compliance** — all four HTML templates now support both `?com.doc.widgetcontextprotocol=<base64>` (query string) and `#wcp-theme=<base64>` (hash) forms
@@ -178,6 +178,8 @@ The installer includes `Uninstall WCP Markdown Editor Agent.app` in `/Applicatio
 - **Published page card** — Settings page shows current publish state, source `.md` path, published timestamp, View and Unpublish actions
 - **Unpublish button** — toolbar Unpublish button removes the published SPA; settings card updates immediately
 - **Manifest fixes** — `/wcp` now includes `type: "directory"`; `/widget/wcp` now includes `uuid` and `container` fields
+- **Theme delete fix** — replaced `window.confirm()` with a custom inline modal; `confirm()` is silently blocked in cross-origin iframes by Chromium/Electron 35; delete button now works correctly
+- **Companion agent v1.0.2** — (a) fixes UTF-8 write encoding, resolves HTTP 502 on non-ASCII saves; (b) uses `os.scandir()` + `threaded=True`, resolves blank sidecar caused by SMB cold-start latency exceeding browse timeout; (c) installer now shows a welcome screen with product name and version; (d) `preinstall` uses `launchctl bootout` + `pkill` to reliably stop any running agent before upgrade
 
 ### 1.0.0 (2026-06-09)
 - Initial release — full WCP 2.1.0 compliance, WYSIWYG editor, companion agent support, Publish to Web, WCP export

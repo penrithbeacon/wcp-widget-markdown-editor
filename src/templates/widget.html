@@ -41,7 +41,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 .tb-btn.primary{background:var(--accent);color:#1e1e2e;border-color:var(--accent)}
 .tb-btn.primary:hover{opacity:.9}
 .tb-btn:disabled{opacity:.4;cursor:default}
-#agent-badge{margin-left:auto;font-size:11px;padding:2px 7px;border-radius:10px;background:var(--surface2);border:1px solid var(--border)}
+#toolbar-nav{display:flex;align-items:center;gap:6px;flex:1;min-width:0;margin-left:6px}
+#toolbar-path{flex:1;min-width:0;font-size:11px;color:var(--muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 2px}
+#toolbar-sep{width:1px;height:18px;background:var(--border);flex-shrink:0}
+#agent-badge{font-size:11px;padding:2px 7px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);flex-shrink:0}
 #agent-badge.ok{border-color:var(--green);color:var(--green)}
 #agent-badge.err{border-color:var(--red);color:var(--red)}
 
@@ -121,8 +124,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
   padding:10px 16px;background:var(--surface);
   border-bottom:1px solid var(--border);flex-shrink:0
 }
-#picker-header h3{font-size:14px;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
-#picker-path{font-size:12px;color:var(--muted);font-weight:normal}
+#picker-header h3{font-size:14px;flex-shrink:0;margin:0}
+#picker-path{flex:1;font-size:12px;color:var(--muted);font-weight:normal;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;min-width:0}
+#picker-up-btn{flex-shrink:0;padding:3px 10px;font-size:12px}
+#picker-up-btn:disabled{opacity:.35;cursor:not-allowed}
 #picker-body{display:flex;flex:1;overflow:hidden}
 #picker-sidebar{
   width:180px;flex-shrink:0;background:var(--surface);
@@ -203,6 +208,11 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
     <button class="tb-btn" id="btn-delete" onclick="deleteItem()" disabled>🗑 Delete</button>
     <button class="tb-btn" id="btn-publish" onclick="publishDoc()" disabled>🌐 Publish</button>
     <button class="tb-btn" id="btn-unpublish" onclick="unpublishDoc()" style="display:none">✕ Unpublish</button>
+    <div id="toolbar-nav">
+      <div id="toolbar-sep"></div>
+      <button class="tb-btn" id="btn-up-main" onclick="navigateUp()" disabled title="Go up one level">↑ Up</button>
+      <span id="toolbar-path"></span>
+    </div>
     <span id="agent-badge" class="err">agent: checking…</span>
   </div>
 
@@ -296,8 +306,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);fon
 <!-- Full-screen folder picker -->
 <div id="picker">
   <div id="picker-header">
-    <h3>Choose Root Folder <span id="picker-path"></span></h3>
-    <button class="tb-btn" style="flex-shrink:0;margin-left:8px" onclick="closePicker()">✕ Cancel</button>
+    <h3>Choose Root Folder</h3>
+    <button id="picker-up-btn" class="tb-btn" onclick="pickerUp()" disabled title="Go up one level">↑ Up</button>
+    <span id="picker-path"></span>
+    <button class="tb-btn" style="flex-shrink:0" onclick="closePicker()">✕ Cancel</button>
   </div>
   <div id="picker-body">
     <div id="picker-sidebar">
@@ -342,6 +354,12 @@ let   dirty = false;
 
 // picker state
 let   pickerCurrentPath = '';
+let   _pickerHistory    = [];  // navigation history for ↑ Up button
+
+function _pickerSyncUpBtn() {
+  const btn = document.getElementById('picker-up-btn');
+  if (btn) btn.disabled = _pickerHistory.length === 0;
+}
 
 // ── Toast ────────────────────────────────────────────────────────────────────
 function toast(msg, dur = 2500) {
@@ -566,7 +584,14 @@ async function loadDir(rel) {
     const bc = document.getElementById('breadcrumb');
     bc.textContent = '📁 ' + (rel || '/');
     bc.title       = rel || '/';
+    // Sidecar footer ↑ button
     document.getElementById('btn-up').disabled = !rel;
+    // Toolbar: show full absolute path and sync ↑ Up button
+    const absPath = rel ? rootPath + '/' + rel : rootPath;
+    const tp = document.getElementById('toolbar-path');
+    if (tp) tp.textContent = absPath;
+    const btnUpMain = document.getElementById('btn-up-main');
+    if (btnUpMain) btnUpMain.disabled = !rel;
   } catch(e) { toast('Failed to load: ' + e.message); }
 }
 
@@ -821,9 +846,11 @@ document.querySelectorAll('.modal-backdrop').forEach(m => {
 // Clicking "Select This Folder" confirms that path as the new root.
 
 window.openPicker = async function() {
+  // Reset navigation history whenever picker is opened
+  _pickerHistory    = [];
+  pickerCurrentPath = '';
   document.getElementById('picker').classList.add('open');
   // Populate favourites
-  const home   = '';  // agent will resolve ~ server-side, we pass empty to trigger default
   const favs   = [
     { name: 'Home',      icon: '🏠', path: '~' },
     { name: 'Desktop',   icon: '🖥',  path: '~/Desktop' },
@@ -839,7 +866,9 @@ window.openPicker = async function() {
     el.addEventListener('click', () => {
       document.querySelectorAll('.picker-loc').forEach(x => x.classList.remove('active'));
       el.classList.add('active');
-      pickerBrowse(f.path);
+      // Sidebar clicks are explicit top-level jumps — clear history
+      _pickerHistory = [];
+      pickerBrowse(f.path, false);
     });
     favsEl.appendChild(el);
   });
@@ -858,25 +887,29 @@ window.openPicker = async function() {
       el.addEventListener('click', () => {
         document.querySelectorAll('.picker-loc').forEach(x => x.classList.remove('active'));
         el.classList.add('active');
-        pickerBrowse(loc.path);
+        // Sidebar clicks are explicit top-level jumps — clear history
+        _pickerHistory = [];
+        pickerBrowse(loc.path, false);
       });
       locsEl.appendChild(el);
     });
   } catch {
     locsEl.innerHTML = '<div class="picker-loc" style="opacity:.5;font-size:12px">Locations unavailable</div>';
   }
-  // Start at current root or home
-  pickerBrowse(rootPath || '~');
+  // Start at current root or home (not a "deeper" navigation, no history push)
+  pickerBrowse(rootPath || '~', false);
 };
 
 window.closePicker = function() {
   document.getElementById('picker').classList.remove('open');
 };
 
-async function pickerBrowse(path) {
+async function pickerBrowse(path, pushCurrent = true) {
+  if (pushCurrent && pickerCurrentPath) _pickerHistory.push(pickerCurrentPath);
   pickerCurrentPath = path;
   document.getElementById('picker-path').textContent = path;
   document.getElementById('picker-select-label').textContent = `Select: ${path}`;
+  _pickerSyncUpBtn();
 
   const listEl  = document.getElementById('picker-list');
   const emptyEl = document.getElementById('picker-empty');
@@ -888,7 +921,11 @@ async function pickerBrowse(path) {
     const r  = await fetch('/widget/api/agent/browse?path=' + encodeURIComponent(path));
     const dj = await r.json();
     const dirs = (dj.entries || [])
-      .filter(e => e.type === 'dir' && !e.name.startsWith('.') && !e.name.startsWith('#'))
+      .filter(e => e.type === 'dir'
+        && !e.name.startsWith('.') && !e.name.startsWith('#')
+        // Exclude macOS app/framework/plugin bundles — they are dirs on disk but not user folders
+        && !e.name.endsWith('.app') && !e.name.endsWith('.framework')
+        && !e.name.endsWith('.bundle') && !e.name.endsWith('.plugin'))
       .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
     if (!dirs.length) {
       emptyEl.classList.add('visible');
@@ -908,6 +945,12 @@ async function pickerBrowse(path) {
     listEl.appendChild(err);
   }
 }
+
+window.pickerUp = function() {
+  if (!_pickerHistory.length) return;
+  const prev = _pickerHistory.pop();
+  pickerBrowse(prev, false);
+};
 
 window.pickerSelect = async function() {
   if (!pickerCurrentPath) return;
@@ -929,6 +972,12 @@ window.pickerSelect = async function() {
 // We add two thin proxy routes in app.py: /widget/api/agent/browse and /widget/api/agent/drives
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
+// Re-validate state whenever the widget tab becomes visible again.
+// Without this, the file tree stays in DOM after agent uninstall/reinstall
+// because navigating away and back doesn't reload the iframe.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') validateState();
+});
 checkPublished();
 validateState();
 </script>

@@ -46,11 +46,11 @@ proxy through the agent; the Docker volume stores widget state only (config, pub
 | `/widget/logs` | GET | WCP logs protocol — structured log envelope |
 | `/widget/configure` | POST | Save per-instance configuration: `{ root, theme }` |
 | `/widget/api/root/validate` | GET | Validate configured root path and agent reachability |
-| `/widget/api/files/list` | GET | List files/directories via agent: `?path=<abs-path>` |
-| `/widget/api/files/read` | GET | Read file content via agent: `?path=<abs-path>` |
-| `/widget/api/files/save` | POST | Write file via agent: `{ path, content }` |
+| `/widget/api/files/list` | GET | List files/directories via agent: `?path=<path-relative-to-root>` |
+| `/widget/api/files/read` | GET | Read file content via agent: `?path=<path-relative-to-root>` |
+| `/widget/api/files/save` | POST | Write file via agent: `{ path: <relative-to-root>, content }` |
 | `/widget/api/files/mkdir` | POST | Create directory via agent: `{ path }` |
-| `/widget/api/files/rename` | POST | Rename via agent: `{ old_path, new_path }` |
+| `/widget/api/files/rename` | POST | Rename via agent: `{ old, new }` |
 | `/widget/api/files/delete` | POST | Delete via agent: `{ path }` |
 | `/widget/api/agent/status` | GET | Agent reachability: `{ available: bool, agent: {...} }` |
 | `/widget/api/agent/browse` | GET | Proxy to agent directory listing: `?path=<path>` |
@@ -63,7 +63,7 @@ proxy through the agent; the Docker volume stores widget state only (config, pub
 | `/widget/api/publish/status` | GET | Published SPA state: `{ published, title, source_path, published_at, url }` |
 | `/widget/export.wcp` | GET | Download widget as `.wcp` package |
 | `/widget/agent/installer` | GET | Companion agent `.pkg` installer; `503` if not bundled |
-| `/` | GET | Serves published SPA; `404` if nothing published |
+| `/` | GET | Serves published SPA; `302 → /widget/` if nothing published |
 
 ---
 
