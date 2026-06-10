@@ -27,11 +27,26 @@ h1{font-size:18px;color:var(--accent);margin-bottom:20px}
 .btn.primary{background:var(--accent);color:#1e1e2e;border-color:var(--accent)}
 .btn.primary:hover{opacity:.9}
 .port-display{font-family:monospace;font-size:15px;color:var(--green);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:8px 12px;display:inline-block}
-.theme-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.theme-card{border:2px solid var(--border);border-radius:6px;padding:8px;cursor:pointer;text-align:center;font-size:12px;transition:border-color .15s}
-.theme-card:hover{border-color:var(--muted)}
-.theme-card.active{border-color:var(--accent)}
-.theme-swatch{height:28px;border-radius:3px;margin-bottom:6px}
+/* ── Theme list ──────────────────────────────────────────────────────────────── */
+.theme-list-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:5px;border:1px solid transparent;transition:background .12s;cursor:pointer}
+.theme-list-item:hover{background:var(--surface2)}
+.theme-list-item.active-theme{border-color:var(--border);background:var(--surface2)}
+.theme-list-item input[type=radio]{accent-color:var(--accent);flex-shrink:0;cursor:pointer}
+.theme-name{flex:1;font-size:13px}
+.theme-builtin-badge{font-size:10px;background:var(--surface2);border:1px solid var(--border);border-radius:3px;padding:2px 6px;color:var(--muted);flex-shrink:0}
+/* ── Import overlay ──────────────────────────────────────────────────────────── */
+#import-overlay{display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,.6);align-items:center;justify-content:center}
+#import-overlay.open{display:flex}
+#import-modal{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:20px;width:440px;max-height:80vh;display:flex;flex-direction:column;gap:12px}
+#import-modal h3{font-size:15px;margin-bottom:2px}
+#import-modal .sub{font-size:12px;color:var(--muted)}
+#import-checks{overflow-y:auto;flex:1;max-height:260px;border:1px solid var(--border);border-radius:5px;padding:4px 0;background:var(--bg)}
+.import-check-row{display:flex;align-items:center;gap:10px;padding:8px 12px;font-size:13px;cursor:pointer}
+.import-check-row:hover{background:var(--surface2)}
+.import-check-row input{accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+.import-sel-links{display:flex;gap:12px;font-size:12px}
+.import-sel-links a{color:var(--accent);cursor:pointer;text-decoration:none}
+.import-sel-links a:hover{text-decoration:underline}
 .agent-status{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:6px;background:var(--surface2);border:1px solid var(--border)}
 .agent-dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
 .agent-dot.ok{background:var(--green)}
@@ -149,27 +164,37 @@ h1{font-size:18px;color:var(--accent);margin-bottom:20px}
     </div>
   </div>
 
+  <!-- Published page -->
+  <div class="section" id="section-published">
+    <h2>Published Page</h2>
+    <div id="pub-status" style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:6px;background:var(--surface2);border:1px solid var(--border)">
+      <div id="pub-dot" style="width:10px;height:10px;border-radius:50%;background:var(--muted);flex-shrink:0"></div>
+      <div id="pub-text" style="flex:1;font-size:13px">Checking…</div>
+    </div>
+    <div id="pub-detail" style="display:none;margin-top:10px">
+      <div class="field">
+        <label>Source file</label>
+        <div id="pub-source" style="font-family:monospace;font-size:13px;color:var(--accent);background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:7px 10px;word-break:break-all"></div>
+      </div>
+      <div class="field">
+        <label>Published at</label>
+        <div id="pub-date" style="font-size:13px;color:var(--muted)"></div>
+      </div>
+      <div class="btn-row" style="margin-top:8px">
+        <button class="btn" onclick="window.open('http://localhost:{{ port }}/', '_blank')">🌐 View Published Page</button>
+        <button class="btn" onclick="unpublish()" style="color:var(--red);border-color:var(--red)">✕ Unpublish</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Themes -->
   <div class="section">
     <h2>Theme</h2>
-    <div class="theme-grid" id="theme-grid">
-      <div class="theme-card" data-theme="default" onclick="selectTheme('default')">
-        <div class="theme-swatch" style="background:linear-gradient(135deg,#1e1e2e,#89b4fa)"></div>
-        Mocha (default)
-      </div>
-      <div class="theme-card" data-theme="latte" onclick="selectTheme('latte')">
-        <div class="theme-swatch" style="background:linear-gradient(135deg,#eff1f5,#1e66f5)"></div>
-        Latte
-      </div>
-      <div class="theme-card" data-theme="frappe" onclick="selectTheme('frappe')">
-        <div class="theme-swatch" style="background:linear-gradient(135deg,#303446,#8caaee)"></div>
-        Frappé
-      </div>
-    </div>
-    <div class="field" style="margin-top:12px">
-      <label>Import custom theme (.wcpt)</label>
-      <input type="file" id="theme-file" accept=".wcpt" onchange="importTheme(event)" />
-      <div class="hint">A .wcpt file exported from Penrith Beacon Theme Studio.</div>
+    <div id="theme-list"></div>
+    <div class="field" style="margin-top:14px">
+      <label>Import custom themes (.wcpt)</label>
+      <input type="file" id="theme-file" accept=".wcpt" onchange="openImportModal(event)" />
+      <div class="hint">A .wcpt file exported from Penrith Beacon Theme Studio. Files may contain multiple themes.</div>
     </div>
   </div>
 </div>
@@ -199,6 +224,23 @@ h1{font-size:18px;color:var(--accent);margin-bottom:20px}
     <span id="picker-select-label">Browse to a folder and click Select.</span>
     <button class="btn primary" onclick="pickerSelect()">✓ Select This Folder</button>
     <button class="btn" onclick="closePicker()">Cancel</button>
+  </div>
+</div>
+
+<!-- Import themes overlay -->
+<div id="import-overlay" onclick="if(event.target===this)closeImportModal()">
+  <div id="import-modal">
+    <h3>Import Themes from .wcpt</h3>
+    <div class="sub" id="import-sub"></div>
+    <div class="import-sel-links">
+      <a onclick="importSelAll(true)">Select all</a>
+      <a onclick="importSelAll(false)">Deselect all</a>
+    </div>
+    <div id="import-checks"></div>
+    <div class="btn-row">
+      <button class="btn primary" id="import-confirm-btn" onclick="confirmImport()">Import</button>
+      <button class="btn" onclick="closeImportModal()">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -277,6 +319,38 @@ function toast(msg, dur = 2500) {
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.remove('show'), dur);
 }
+
+// ── Publish status ────────────────────────────────────────────────────────────
+async function checkPublishStatus() {
+  try {
+    const r = await fetch('/widget/api/publish/status');
+    const d = await r.json();
+    const dot    = document.getElementById('pub-dot');
+    const text   = document.getElementById('pub-text');
+    const detail = document.getElementById('pub-detail');
+    if (d.published) {
+      dot.style.background  = 'var(--green)';
+      text.textContent      = 'A page is currently published.';
+      detail.style.display  = '';
+      document.getElementById('pub-source').textContent = d.source_path || '(path not recorded)';
+      if (d.published_at) {
+        const dt = new Date(d.published_at);
+        document.getElementById('pub-date').textContent = dt.toLocaleString();
+      }
+    } else {
+      dot.style.background  = 'var(--muted)';
+      text.textContent      = 'Nothing is currently published.';
+      detail.style.display  = 'none';
+    }
+  } catch {}
+}
+checkPublishStatus();
+
+window.unpublish = async function() {
+  await fetch('/widget/publish', { method: 'DELETE' });
+  toast('Unpublished.');
+  checkPublishStatus();
+};
 
 // ── Agent check ───────────────────────────────────────────────────────────────
 async function checkAgent() {
@@ -404,30 +478,197 @@ window.saveRoot = async function() {
   toast('Root path saved.');
 };
 
-// ── Theme ─────────────────────────────────────────────────────────────────────
-window.selectTheme = async function(name) {
-  currentTheme = name;
-  document.querySelectorAll('.theme-card').forEach(c =>
-    c.classList.toggle('active', c.dataset.theme === name));
+// ── Theme management ──────────────────────────────────────────────────────────
+const BUILTIN_THEMES = [
+  { id:'dark',  name:'Penrith Beacon WCP Dark',           builtin:true,
+    vars:{'--wcp-color-bg':'#0d1117','--wcp-color-surface':'#161b22','--wcp-color-surface-raised':'#1c2128',
+          '--wcp-color-border':'#30363d','--wcp-color-text':'#e6edf3','--wcp-color-text-muted':'#8b949e',
+          '--wcp-color-primary':'#f0883e','--wcp-color-success':'#3fb950','--wcp-color-danger':'#f85149',
+          '--wcp-color-warning':'#d29922','--wcp-color-info':'#58a6ff',
+          '--wcp-radius-md':'8px','--wcp-shadow-sm':'0 4px 16px rgba(0,0,0,.45)'} },
+  { id:'light', name:'Penrith Beacon WCP Light',          builtin:true,
+    vars:{'--wcp-color-bg':'#ffffff','--wcp-color-surface':'#f6f8fa','--wcp-color-surface-raised':'#eaeef2',
+          '--wcp-color-border':'#d0d7de','--wcp-color-text':'#1f2328','--wcp-color-text-muted':'#636c76',
+          '--wcp-color-primary':'#f0883e','--wcp-color-success':'#1a7f37','--wcp-color-danger':'#cf222e',
+          '--wcp-color-warning':'#9a6700','--wcp-color-info':'#0969da',
+          '--wcp-radius-md':'8px','--wcp-shadow-sm':'0 4px 8px rgba(0,0,0,.12)'} },
+  { id:'hc',    name:'Penrith Beacon WCP High Contrast',  builtin:true,
+    vars:{'--wcp-color-bg':'#000000','--wcp-color-surface':'#0d0d0d','--wcp-color-surface-raised':'#1a1a1a',
+          '--wcp-color-border':'#ffffff','--wcp-color-text':'#ffffff','--wcp-color-text-muted':'#cccccc',
+          '--wcp-color-primary':'#ff8c00','--wcp-color-success':'#00ff41','--wcp-color-danger':'#ff3333',
+          '--wcp-color-warning':'#ffff00','--wcp-color-info':'#00b4ff',
+          '--wcp-radius-md':'4px','--wcp-shadow-sm':'none'} },
+];
+
+let _customThemes  = [];
+let _activeThemeId = currentTheme || 'dark';
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function getAllThemes() { return [...BUILTIN_THEMES, ..._customThemes]; }
+
+function renderThemeList() {
+  const list = document.getElementById('theme-list');
+  list.innerHTML = getAllThemes().map(t => {
+    const active  = t.id === _activeThemeId || (t.uuid && t.uuid === _activeThemeId);
+    const tid     = t.id || t.uuid;
+    const actions = t.builtin ? '' :
+      `<button class="btn" style="font-size:11px;padding:3px 9px;color:var(--red);border-color:rgba(243,139,168,.35)"
+         onclick="event.stopPropagation();deleteTheme('${esc(tid)}')">Delete</button>`;
+    return `<div class="theme-list-item${active?' active-theme':''}" onclick="selectTheme('${esc(tid)}')">
+      <input type="radio" name="active-theme" ${active?'checked':''} onchange="selectTheme('${esc(tid)}')" onclick="event.stopPropagation()">
+      <span class="theme-name">${esc(t.name)}</span>
+      ${t.builtin?'<span class="theme-builtin-badge">Built-in</span>':''}
+      ${actions}
+    </div>`;
+  }).join('');
+}
+
+async function loadThemes() {
+  try {
+    const r = await fetch(`/widget/api/themes?wcpInstanceId=${INSTANCE_ID}`);
+    const d = await r.json();
+    _activeThemeId = d.active || 'dark';
+    _customThemes  = d.custom || [];
+  } catch {}
+  renderThemeList();
+}
+loadThemes();
+
+window.selectTheme = async function(id) {
+  _activeThemeId = id;
+  const t = getAllThemes().find(x => x.id === id || x.uuid === id);
+  if (t) applyTheme(t.vars);
+  renderThemeList();
   await fetch('/widget/configure', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json', 'Wcp-Instance-Id': INSTANCE_ID },
-    body:    JSON.stringify({ theme: name })
+    method:'POST', headers:{'Content-Type':'application/json','Wcp-Instance-Id':INSTANCE_ID},
+    body: JSON.stringify({ theme: id })
   });
   toast('Theme saved.');
 };
 
-window.importTheme = async function(event) {
-  const file = event.target.files[0];
-  if (!file) return;
-  try {
-    const text  = await file.text();
-    const theme = JSON.parse(text);
-    applyTheme(theme);
-    toast('Theme applied from .wcpt file.');
-  } catch {
-    toast('Invalid .wcpt file.');
+window.deleteTheme = async function(id) {
+  const t = _customThemes.find(x => x.id===id || x.uuid===id);
+  if (!t) return;
+  if (!confirm(`Delete theme "${t.name}"?`)) return;
+  await fetch(`/widget/api/themes/${encodeURIComponent(id)}`, {
+    method:'DELETE', headers:{'Wcp-Instance-Id':INSTANCE_ID}
+  });
+  _customThemes = _customThemes.filter(x => x.id!==id && x.uuid!==id);
+  if (_activeThemeId === id) {
+    _activeThemeId = 'dark';
+    applyTheme(BUILTIN_THEMES[0].vars);
   }
+  renderThemeList();
+  toast('Theme deleted.');
+};
+
+// ── WCPT import modal ─────────────────────────────────────────────────────────
+let _importCandidates = [];
+
+window.openImportModal = async function(event) {
+  const file = event.target.files[0];
+  document.getElementById('theme-file').value = '';
+  if (!file) return;
+  let themes = [];
+  try {
+    const JSZip = (await import('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js')).default
+                  || window.JSZip;
+    // JSZip CDN is UMD — load via script tag approach if ESM import returns nothing
+    if (!JSZip) throw new Error('jszip not available as ESM default');
+    const buf = await file.arrayBuffer();
+    const zip = await JSZip.loadAsync(buf);
+    const tf  = zip.file('themes.json');
+    if (!tf) throw new Error('no themes.json in archive');
+    themes = JSON.parse(await tf.async('string'));
+    if (!Array.isArray(themes)) throw new Error('themes.json is not an array');
+  } catch (e) {
+    // Fallback: load via <script> + global
+    try {
+      themes = await _loadWcptViaScript(file);
+    } catch {
+      toast('Invalid .wcpt file — could not read themes.');
+      return;
+    }
+  }
+  if (!themes.length) { toast('No themes found in this .wcpt file.'); return; }
+  _importCandidates = themes;
+  const sub   = document.getElementById('import-sub');
+  const checks = document.getElementById('import-checks');
+  sub.textContent = `${file.name} · ${themes.length} theme${themes.length!==1?'s':''}`;
+  checks.innerHTML = themes.map((t,i) => {
+    const nm = t.name || t.id || `Theme ${i+1}`;
+    return `<label class="import-check-row">
+      <input type="checkbox" class="imp-cb" checked data-idx="${i}">
+      ${esc(nm)}
+    </label>`;
+  }).join('');
+  _updateImportBtn();
+  document.getElementById('import-overlay').classList.add('open');
+};
+
+async function _loadWcptViaScript(file) {
+  // JSZip UMD fallback: inject script, use global
+  await new Promise((res,rej) => {
+    if (window.JSZip) return res();
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+    s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+  const buf = await file.arrayBuffer();
+  const zip = await window.JSZip.loadAsync(buf);
+  const tf  = zip.file('themes.json');
+  if (!tf) throw new Error('no themes.json');
+  const themes = JSON.parse(await tf.async('string'));
+  if (!Array.isArray(themes)) throw new Error('not an array');
+  return themes;
+}
+
+function _updateImportBtn() {
+  const n   = document.querySelectorAll('.imp-cb:checked').length;
+  const btn = document.getElementById('import-confirm-btn');
+  btn.textContent = `Import ${n} theme${n!==1?'s':''}`;
+  btn.disabled    = n === 0;
+}
+document.getElementById('import-checks').addEventListener('change', _updateImportBtn);
+
+window.importSelAll = function(val) {
+  document.querySelectorAll('.imp-cb').forEach(cb => cb.checked = val);
+  _updateImportBtn();
+};
+
+window.closeImportModal = function() {
+  document.getElementById('import-overlay').classList.remove('open');
+  _importCandidates = [];
+};
+
+window.confirmImport = async function() {
+  const chosen = [...document.querySelectorAll('.imp-cb:checked')]
+    .map(cb => _importCandidates[parseInt(cb.dataset.idx)])
+    .filter(Boolean);
+  if (!chosen.length) return;
+  const r = await fetch('/widget/api/themes/import', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','Wcp-Instance-Id':INSTANCE_ID},
+    body: JSON.stringify({ themes: chosen })
+  });
+  const d = await r.json();
+  // Merge locally
+  const existingKeys = new Set(_customThemes.map(t => t.uuid||t.id));
+  chosen.forEach(t => {
+    const k = t.uuid||t.id;
+    if (k && existingKeys.has(k)) {
+      const idx = _customThemes.findIndex(x => (x.uuid||x.id)===k);
+      _customThemes[idx] = t;
+    } else {
+      _customThemes.push(t);
+      if (k) existingKeys.add(k);
+    }
+  });
+  closeImportModal();
+  renderThemeList();
+  toast(`Imported ${d.imported} theme${d.imported!==1?'s':''}.`);
 };
 
 // ── Download agent ────────────────────────────────────────────────────────────

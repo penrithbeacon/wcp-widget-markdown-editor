@@ -52,7 +52,11 @@ def get_guids():
 
 def get_instance_config(instance_id):
     all_config = load_json(CONFIG_FILE, {})
-    return all_config.get(instance_id, {'root': '', 'theme': 'default'})
+    defaults = {'root': '', 'theme': 'dark', 'custom_themes': []}
+    cfg = all_config.get(instance_id, defaults)
+    if 'custom_themes' not in cfg:
+        cfg['custom_themes'] = []
+    return cfg
 
 def save_instance_config(instance_id, config):
     all_config = load_json(CONFIG_FILE, {})
@@ -225,6 +229,46 @@ def configure():
     save_instance_config(iid, cfg)
     return jsonify({'status': 'ok'})
 
+_LEGACY_THEME_MAP = {'default':'dark','mocha':'dark','latte':'light','frappe':'dark'}
+
+@app.route('/widget/api/themes')
+def themes_get():
+    iid    = instance_id_from_request()
+    cfg    = get_instance_config(iid)
+    active = cfg.get('theme', 'dark')
+    active = _LEGACY_THEME_MAP.get(active, active)
+    return jsonify({
+        'active':  active,
+        'custom':  cfg.get('custom_themes', []),
+    })
+
+@app.route('/widget/api/themes/import', methods=['POST'])
+def themes_import():
+    iid  = instance_id_from_request()
+    data = request.get_json(force=True, silent=True) or {}
+    cfg  = get_instance_config(iid)
+    incoming = data.get('themes', [])
+    existing = {t.get('uuid') or t.get('id'): t for t in cfg.get('custom_themes', [])}
+    for t in incoming:
+        key = t.get('uuid') or t.get('id')
+        if key:
+            existing[key] = t
+    cfg['custom_themes'] = list(existing.values())
+    save_instance_config(iid, cfg)
+    return jsonify({'status': 'ok', 'imported': len(incoming)})
+
+@app.route('/widget/api/themes/<theme_id>', methods=['DELETE'])
+def themes_delete(theme_id):
+    iid = instance_id_from_request()
+    cfg = get_instance_config(iid)
+    before = len(cfg.get('custom_themes', []))
+    cfg['custom_themes'] = [t for t in cfg.get('custom_themes', [])
+                            if (t.get('uuid') or t.get('id')) != theme_id]
+    if cfg.get('theme') == theme_id:
+        cfg['theme'] = 'dark'
+    save_instance_config(iid, cfg)
+    return jsonify({'status': 'ok', 'removed': before - len(cfg['custom_themes'])})
+
 # ── Root path validation ──────────────────────────────────────────────────────
 
 @app.route('/widget/api/root/validate')
@@ -372,9 +416,11 @@ def delete_file():
 
 @app.route('/widget/publish', methods=['POST'])
 def publish():
-    data    = request.get_json(force=True, silent=True) or {}
-    content = data.get('html', '<p>No content provided.</p>')
-    title   = data.get('title', 'Published Document')
+    from datetime import datetime as dt
+    data        = request.get_json(force=True, silent=True) or {}
+    content     = data.get('html', '<p>No content provided.</p>')
+    title       = data.get('title', 'Published Document')
+    source_path = data.get('source_path', '')
     os.makedirs(PUBLISHED_DIR, exist_ok=True)
     html = f'''<!DOCTYPE html>
 <html lang="en">
@@ -383,7 +429,23 @@ def publish():
 </head><body>{content}</body></html>'''
     with open(os.path.join(PUBLISHED_DIR, 'index.html'), 'w') as f:
         f.write(html)
-    return jsonify({'status': 'ok', 'url': f'http://localhost:{PORT}/'})
+    # Save metadata so settings page can show what's published
+    meta = {
+        'title':       title,
+        'source_path': source_path,
+        'published_at': dt.utcnow().isoformat() + 'Z',
+        'url':         f'http://localhost:{PORT}/'
+    }
+    save_json(os.path.join(PUBLISHED_DIR, 'meta.json'), meta)
+    return jsonify({'status': 'ok', 'url': meta['url']})
+
+@app.route('/widget/api/publish/status')
+def publish_status():
+    meta_path = os.path.join(PUBLISHED_DIR, 'meta.json')
+    if os.path.exists(meta_path):
+        meta = load_json(meta_path, {})
+        return jsonify({'published': True, **meta})
+    return jsonify({'published': False})
 
 @app.route('/widget/publish', methods=['DELETE'])
 def unpublish():

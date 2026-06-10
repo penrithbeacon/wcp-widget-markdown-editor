@@ -767,7 +767,7 @@ window.publishDoc = async function() {
   const r     = await fetch('/widget/publish', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ html, title })
+    body:    JSON.stringify({ html, title, source_path: currentFile })
   });
   const d = await r.json();
   setPublishedState(true);
