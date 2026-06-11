@@ -159,7 +159,9 @@ The installer includes `Uninstall WCP Markdown Editor Agent.app` in `/Applicatio
 | Tag | Description |
 |-----|-------------|
 | `latest` | Most recent stable release |
-| `1.1.0-wcp2.1.0` | Theme card, WCP URL compliance, WCP-compliant SPA, GFM tables, agent-only model |
+| `beta` | Current beta release |
+| `1.1.0-beta` | Beta — theme card, WCP URL compliance, WCP-compliant SPA, GFM tables, agent-only model |
+| `1.1.0-wcp2.1.0` | Pinned build — same code as 1.1.0-beta |
 | `1.0.0-wcp2.1.0` | Initial release |
 
 ---

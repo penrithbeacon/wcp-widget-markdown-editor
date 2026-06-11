@@ -130,7 +130,7 @@ not a path within the Docker volume.
 | Property | Value |
 |----------|-------|
 | Image | `docker.io/penrithbeacon/wcp-widget-markdown-editor` |
-| Tag | `1.1.0-wcp2.1.0` |
+| Tag | `1.1.0-beta` |
 | Port | `3748` |
 | Volumes | `markdown_workspace:/workspace` |
 | Extra hosts | `host.docker.internal:host-gateway` |

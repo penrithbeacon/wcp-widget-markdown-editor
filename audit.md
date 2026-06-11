@@ -4,10 +4,11 @@
 
 ## Latest Audit
 
-- **Date:** 2026-06-10
-- **Version:** 1.1.0 (widget) · 1.0.1 (agent installer bundled)
+- **Date:** 2026-06-11
+- **Version:** 1.1.0 (widget) · 1.0.2 (agent installer bundled)
 - **WCP:** 2.1.0
-- **Result:** PASS — all functional endpoints audited; two issues found and fixed during run
+- **Stage:** Beta pre-release
+- **Result:** PASS — all checks passed, no issues found
 
 ## Checklist
 
@@ -190,6 +191,7 @@ operations (browse, drives, read, mkdir, rename, delete) function correctly.
 
 | Date | Version | WCP | Result |
 |------|---------|-----|--------|
+| 2026-06-11 | 1.1.0 | 2.1.0 | PASS — beta pre-release audit; all checks passed, agent v1.0.2 bundled |
 | 2026-06-10 | 1.1.0 | 2.1.0 | PASS — 4 issues found and fixed (1 agent encoding bug, 3 doc fixes) |
 | 2026-06-10 | 1.1.0 | 2.1.0 | PASS — clean run, no issues found (WCP protocol endpoints only) |
 | 2026-06-09 | 1.0.0 | 2.1.0 | PASS (1 issue found and fixed during audit) |

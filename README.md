@@ -157,7 +157,7 @@ docker run --rm \
 | Property | Value |
 |----------|-------|
 | WCP Version | 2.1.0 |
-| Widget Version | 1.0.0 |
+| Widget Version | 1.1.0 |
 | Render mode | iframe |
 | Auth | None |
 | Default card size | 12×12 |
@@ -183,8 +183,9 @@ docker run --rm \
 | Tag | Description |
 |-----|-------------|
 | `latest` | Most recent stable release |
+| `beta` | Current beta release |
+| `1.1.0-beta` | Beta — theme card, WCP URL compliance, WCP-compliant SPA, GFM tables, agent-only model |
 | `1.0.0` | Initial release — full WCP 2.1.0 compliance, WYSIWYG editor, companion agent support |
-| `1.0.0-beta` | Beta release — first public build |
 
 ---
 
